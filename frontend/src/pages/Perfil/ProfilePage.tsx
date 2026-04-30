@@ -7,7 +7,7 @@ import { apiUrl, resolveMediaUrl } from "@/config/api";
 import { Link } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { validateAvatarFile } from "@/utils/fileUpload";
+import { validateImageUpload } from "@/utils/fileUpload";
 
 type MePayload = {
   id: number;
@@ -160,9 +160,9 @@ export default function ProfilePage() {
     
     try {
       // Validate file using security utilities (OWASP 2025: A05)
-      const validation = await validateAvatarFile(f);
+      const validation = await validateImageUpload(f);
       
-      if (!validation.valid) {
+      if (!validation.isValid) {
         setAlert({
           show: true,
           variant: "error",

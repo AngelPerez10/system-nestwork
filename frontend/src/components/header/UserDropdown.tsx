@@ -12,7 +12,7 @@ export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [me, setMe] = useState<any>(null);
   const navigate = useNavigate();
-  const { user, isAdmin, isAuthenticated } = useAuth();
+  const { user, isAdmin } = useAuth();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const token = useMemo(

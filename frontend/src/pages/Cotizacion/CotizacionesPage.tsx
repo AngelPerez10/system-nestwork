@@ -1,4 +1,5 @@
 import PageMeta from "@/components/common/PageMeta";
+import ComponentCard from "@/components/common/ComponentCard";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Modal } from "@/components/ui/modal";

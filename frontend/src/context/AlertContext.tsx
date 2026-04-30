@@ -47,7 +47,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
 
       setAlerts((prev) => [...prev, alert]);
 
-      if (alert.duration > 0) {
+      if (alert.duration && alert.duration > 0) {
         setTimeout(() => {
           dismissAlert(id);
         }, alert.duration);

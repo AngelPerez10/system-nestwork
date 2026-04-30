@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
-import { validateSignatureFile } from '../../../utils/fileUpload';
+import { validateSignatureUpload } from '../../../utils/fileUpload';
 import { useAlertLocal } from '../../../hooks/useAlertLocal';
 
 interface SignaturePadProps {
@@ -26,22 +26,21 @@ export default function SignaturePad({
   const [isDrawing, setIsDrawing] = useState(false);
   const [isEmpty, setIsEmpty] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
-  const { addAlert, removeAlert } = useAlertLocal();
+  const { showAlert } = useAlertLocal();
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    const alertId = addAlert('loading', 'Procesando firma...', 'info');
 
     try {
       // Validate file using security utilities
-      const validation = await validateSignatureFile(file);
+      const validation = await validateSignatureUpload(file);
       
-      if (!validation.valid) {
-        removeAlert(alertId);
-        addAlert('signature-upload-error', validation.error || 'Error al subir firma', 'error');
+      if (!validation.isValid) {
+        showAlert('error', 'Error al subir firma', validation.error || 'Error al subir firma');
+        setIsUploading(false);
         return;
       }
 
@@ -55,29 +54,28 @@ export default function SignaturePad({
         // Call parent callback if provided
         onFileUpload?.(file);
         
-        removeAlert(alertId);
-        addAlert('signature-upload-success', 'Firma cargada exitosamente', 'success');
+        showAlert('success', 'Firma cargada', 'Firma cargada exitosamente');
+        setIsUploading(false);
       };
       reader.onerror = () => {
-        removeAlert(alertId);
-        addAlert('signature-read-error', 'Error al leer el archivo', 'error');
+        showAlert('error', 'Error de lectura', 'Error al leer el archivo');
+        setIsUploading(false);
       };
       reader.readAsDataURL(file);
     } catch (error) {
-      removeAlert(alertId);
-      addAlert(
-        'signature-upload-error',
-        error instanceof Error ? error.message : 'Error al procesar firma',
-        'error'
+      showAlert(
+        'error',
+        'Error al procesar',
+        error instanceof Error ? error.message : 'Error al procesar firma'
       );
-    } finally {
       setIsUploading(false);
+    } finally {
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
-  }, [onChange, onFileUpload, addAlert, removeAlert]);
+  }, [onChange, onFileUpload, showAlert]);
 
   const triggerFileInput = () => {
     if (disabled || isUploading) return;
