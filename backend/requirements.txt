@@ -1,0 +1,14 @@
+# Pin versions from a tested venv; upgrade with care (security patches first).
+# Django 5.2 LTS: https://docs.djangoproject.com/en/5.2/releases/5.2/
+Django==5.2.13
+django-tenants==3.10.1
+djangorestframework==3.17.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+django-environ==0.13.0
+psycopg2-binary==2.9.11
+PyJWT==2.12.1
+asgiref==3.11.1
+sqlparse==0.5.5
+tzdata==2026.1
+mercadopago==2.2.3

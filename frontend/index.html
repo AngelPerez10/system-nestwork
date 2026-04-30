@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+
+<body class="dark:bg-gray-900">
+  <script>
+    (function () {
+      try {
+        var isSignin = (window.location.pathname === '/signin' || window.location.pathname === '/signin/');
+        var userRaw = localStorage.getItem('user');
+        var token = localStorage.getItem('auth_token');
+        var userObj = null;
+        if (userRaw) { try { userObj = JSON.parse(userRaw); } catch (e) { } }
+
+        // Si está en /signin y ya hay sesión (staff), evitar ver el login y pasar al panel
+        if (isSignin && userObj && (userObj.is_staff || userObj.is_superuser) && token) {
+          window.history.replaceState(null, '', '/dashboard');
+          return;
+        }
+
+        // El home en / es público (landing). La app (React + RequireAuth) controla el resto.
+      } catch (e) { }
+    })();
+  </script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
