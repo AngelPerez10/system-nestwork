@@ -1,14 +1,55 @@
-# Pin versions from a tested venv; upgrade with care (security patches first).
-# Django 5.2 LTS: https://docs.djangoproject.com/en/5.2/releases/5.2/
+# NestWork Backend Dependencies
+# Last updated: 2026-04-30
+# Python 3.14+ compatible
+
+# =============================================================================
+# CORE - Django 5.2 LTS (supported until April 2028)
+# =============================================================================
+# Django 5.2 LTS is recommended for production stability
+# Latest patch: 5.2.13 (April 2026)
+# Next LTS: Django 6.2 LTS (April 2027)
 Django==5.2.13
+
+# Multi-tenant architecture with PostgreSQL schemas
 django-tenants==3.10.1
+
+# Django REST Framework - API development
 djangorestframework==3.17.1
+
+# JWT Authentication
 djangorestframework-simplejwt==5.5.1
+
+# =============================================================================
+# DATABASE - PostgreSQL 14-18 compatible
+# =============================================================================
+# psycopg2-binary 2.9.11 supports PostgreSQL 12 through 18
+# For production: consider psycopg2 (non-binary) or psycopg3
+psycopg2-binary==2.9.11
+
+# =============================================================================
+# UTILITIES
+# =============================================================================
 django-cors-headers==4.9.0
 django-environ==0.13.0
-psycopg2-binary==2.9.11
-PyJWT==2.12.1
 asgiref==3.11.1
 sqlparse==0.5.5
 tzdata==2026.1
+
+# =============================================================================
+# SECURITY
+# =============================================================================
+PyJWT==2.12.1
+
+# =============================================================================
+# PAYMENTS - Mercado Pago SDK
+# =============================================================================
 mercadopago==2.2.3
+
+# =============================================================================
+# DEVELOPMENT (optional, uncomment for dev environments)
+# =============================================================================
+# pytest==8.4.1
+# pytest-django==4.11.1
+# black==25.1.0
+# ruff==0.11.0
+# mypy==1.15.0

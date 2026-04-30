@@ -7,6 +7,7 @@ import { apiUrl, resolveMediaUrl } from "@/config/api";
 import { Link } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { validateAvatarFile } from "@/utils/fileUpload";
 
 type MePayload = {
   id: number;
@@ -153,37 +154,53 @@ export default function ProfilePage() {
 
   const showInitials = !avatarImgSrc;
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      setAlert({
-        show: true,
-        variant: "error",
-        title: "Archivo no válido",
-        message: "Seleccione una imagen (JPG, PNG o WEBP).",
-      });
-      return;
-    }
-    if (f.size > 4.5 * 1024 * 1024) {
-      setAlert({
-        show: true,
-        variant: "error",
-        title: "Imagen demasiado grande",
-        message: "Use una imagen de menos de 5 MB.",
-      });
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      const r = reader.result;
-      if (typeof r === "string") {
-        setPreviewDataUrl(r);
-        setRemovePhoto(false);
+    
+    try {
+      // Validate file using security utilities (OWASP 2025: A05)
+      const validation = await validateAvatarFile(f);
+      
+      if (!validation.valid) {
+        setAlert({
+          show: true,
+          variant: "error",
+          title: "Archivo no válido",
+          message: validation.error || "Seleccione una imagen válida (JPG, PNG o WEBP).",
+        });
+        e.target.value = "";
+        return;
       }
-    };
-    reader.readAsDataURL(f);
-    e.target.value = "";
+      
+      // Read file as DataURL
+      const reader = new FileReader();
+      reader.onload = () => {
+        const r = reader.result;
+        if (typeof r === "string") {
+          setPreviewDataUrl(r);
+          setRemovePhoto(false);
+        }
+      };
+      reader.onerror = () => {
+        setAlert({
+          show: true,
+          variant: "error",
+          title: "Error de lectura",
+          message: "No se pudo leer el archivo. Intente de nuevo.",
+        });
+      };
+      reader.readAsDataURL(f);
+    } catch (error) {
+      setAlert({
+        show: true,
+        variant: "error",
+        title: "Error al procesar imagen",
+        message: error instanceof Error ? error.message : "Intente con otra imagen.",
+      });
+    } finally {
+      e.target.value = "";
+    }
   };
 
   const persistUser = (data: MePayload) => {

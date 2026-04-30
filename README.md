@@ -15,21 +15,25 @@ Sistema de gestión empresarial multi-tenant para administración de órdenes de
 ## 🛠️ Stack Tecnológico
 
 ### Backend
-- **Django 5.2** + Django REST Framework 3.17
+- **Django 5.2 LTS** + Django REST Framework 3.17
+  - Soporte garantizado hasta Abril 2028
+  - Python 3.10 - 3.14 compatible
 - **django-tenants 3.10** - Multi-tenancy con schemas PostgreSQL
-- **PostgreSQL** - Base de datos principal
+- **PostgreSQL 17-18** - Base de datos principal
+  - Recomendado: PostgreSQL 17 (soporte hasta 2029) o 18 (soporte hasta 2030)
+  - Mínimo requerido: PostgreSQL 14 (soporte hasta Noviembre 2026)
 - **SimpleJWT** - Autenticación con JWT (cookies httpOnly)
 - **Mercado Pago** - Integración de pagos y suscripciones
 
 ### Frontend
-- **React 19** + TypeScript
+- **React 19** + TypeScript 5.8
 - **Vite 8.0** - Build tool y dev server
 - **Tailwind CSS 4.0** - Estilos
-- **Lucide React** - Iconos
+- **Lucide React 1.14** - Iconos (2000+ iconos disponibles)
 - **React Router 7** - Navegación
-- **FullCalendar** - Calendario interactivo
-- **ApexCharts** - Gráficas y visualizaciones
-- **Motion** - Animaciones
+- **FullCalendar 6.1** - Calendario interactivo
+- **ApexCharts 4.1** - Gráficas y visualizaciones
+- **Motion (Framer Motion)** - Animaciones
 
 ## 📁 Estructura del Proyecto
 
@@ -83,10 +87,28 @@ system-nestwork/
 ## 🚀 Instalación
 
 ### Prerrequisitos
-- Python 3.11+
-- Node.js 18+
-- PostgreSQL 14+
-- Git
+
+| Software | Versión Mínima | Versión Recomendada | Notas |
+|----------|---------------|-------------------|-------|
+| **Python** | 3.10 | 3.14 | Django 5.2 LTS compatible con 3.10-3.14 |
+| **Node.js** | 18.x | 24.x LTS | React 19 requiere Node 18+ |
+| **PostgreSQL** | 14 | 17-18 | PG 14 EOL en Noviembre 2026 |
+| **npm/pnpm** | 9.x | 11.x / 9.x | Gestión de paquetes frontend |
+| **Git** | 2.x | 2.x | Control de versiones |
+
+**Instalar PostgreSQL 17-18:**
+```bash
+# Windows: Descargar desde
+# https://www.postgresql.org/download/windows/
+
+# Linux (Ubuntu/Debian)
+wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
+sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" >> /etc/apt/sources.list.d/pgdg.list'
+sudo apt-get update && sudo apt-get install postgresql-17
+
+# macOS (Homebrew)
+brew install postgresql@17
+```
 
 ### Backend
 

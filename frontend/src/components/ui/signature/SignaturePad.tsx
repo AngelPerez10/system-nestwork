@@ -18,11 +18,71 @@ export default function SignaturePad({
   label,
   width = 400,
   height = 200,
-  disabled = false
+  disabled = false,
+  onFileUpload
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isEmpty, setIsEmpty] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const { addAlert, removeAlert } = useAlertLocal();
+
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const alertId = addAlert('loading', 'Procesando firma...', 'info');
+
+    try {
+      // Validate file using security utilities
+      const validation = await validateSignatureFile(file);
+      
+      if (!validation.valid) {
+        removeAlert(alertId);
+        addAlert('signature-upload-error', validation.error || 'Error al subir firma', 'error');
+        return;
+      }
+
+      // Read file as DataURL
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        onChange(result);
+        setIsEmpty(false);
+        
+        // Call parent callback if provided
+        onFileUpload?.(file);
+        
+        removeAlert(alertId);
+        addAlert('signature-upload-success', 'Firma cargada exitosamente', 'success');
+      };
+      reader.onerror = () => {
+        removeAlert(alertId);
+        addAlert('signature-read-error', 'Error al leer el archivo', 'error');
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      removeAlert(alertId);
+      addAlert(
+        'signature-upload-error',
+        error instanceof Error ? error.message : 'Error al procesar firma',
+        'error'
+      );
+    } finally {
+      setIsUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [onChange, onFileUpload, addAlert, removeAlert]);
+
+  const triggerFileInput = () => {
+    if (disabled || isUploading) return;
+    fileInputRef.current?.click();
+  };
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -191,6 +251,16 @@ export default function SignaturePad({
         </label>
       )}
 
+      {/* Hidden file input for signature upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg"
+        onChange={handleFileChange}
+        className="hidden"
+        disabled={disabled || isUploading}
+      />
+
       <div className="relative inline-block">
         <canvas
           ref={canvasRef}
@@ -205,21 +275,49 @@ export default function SignaturePad({
         />
 
         {!isEmpty && !disabled && (
-          <button
-            type="button"
-            onClick={clear}
-            className="absolute top-2 right-2 px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
-          >
-            Limpiar
-          </button>
+          <div className="absolute top-2 right-2 flex gap-1">
+            <button
+              type="button"
+              onClick={clear}
+              className="px-3 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            >
+              Limpiar
+            </button>
+            
+            <button
+              type="button"
+              onClick={triggerFileInput}
+              disabled={isUploading}
+              className="px-3 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded-md hover:bg-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isUploading ? 'Subiendo...' : 'Subir'}
+            </button>
+          </div>
         )}
       </div>
 
       {isEmpty && (
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Dibuja tu firma aquí
-        </p>
+        <div className="mt-1 flex items-center gap-2">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Dibuja tu firma aquí o{' '}
+            <button
+              type="button"
+              onClick={triggerFileInput}
+              disabled={disabled || isUploading}
+              className="text-orange-600 hover:text-orange-700 underline disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              sube una imagen
+            </button>
+          </p>
+          {isUploading && (
+            <span className="text-xs text-orange-600">Procesando...</span>
+          )}
+        </div>
       )}
+
+      <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+        Formatos: PNG, JPG. Máx. 2MB. Mín. 200x50px
+      </p>
     </div>
   );
 }
