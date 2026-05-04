@@ -1,3 +1,4 @@
+import React from "react";
 import { Link } from "react-router-dom";
 import { PencilIcon, TrashBinIcon } from "@/icons";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
@@ -108,7 +109,7 @@ export function CotizacionStatsCards({ cardShellClass, stats }: { cardShellClass
   );
 }
 
-export function CotizacionesMobileList({
+export const CotizacionesMobileList = React.memo(function CotizacionesMobileList({
   rows,
   loading,
   formatDMY,
@@ -164,9 +165,9 @@ export function CotizacionesMobileList({
       ))}
     </div>
   );
-}
+});
 
-export function CotizacionesTable({
+export const CotizacionesTable = React.memo(function CotizacionesTable({
   rows,
   loading,
   formatDMY,
@@ -259,4 +260,4 @@ export function CotizacionesTable({
       </div>
     </div>
   );
-}
+});

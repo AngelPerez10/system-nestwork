@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { FocusTrap } from "focus-trap-react";
 import PageMeta from "@/components/common/PageMeta";
 import { apiUrl } from "@/config/api";
 
@@ -833,87 +834,112 @@ export default function IaPage() {
 
       {/* ===== Rename Modal ===== */}
       {renameConversationId && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm dark:bg-black/60"
-          onClick={() => { setRenameConversationId(null); setRenameTitle(''); }}
+        <FocusTrap
+          focusTrapOptions={{
+            initialFocus: () => document.querySelector<HTMLInputElement>(`input[aria-label="Nuevo nombre del chat"]`) ?? document.activeElement as HTMLElement,
+            fallbackFocus: () => document.activeElement as HTMLElement,
+            escapeDeactivates: true,
+            onDeactivate: () => { setRenameConversationId(null); setRenameTitle(''); },
+            returnFocusOnDeactivate: true,
+            allowOutsideClick: true,
+          }}
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200/50 bg-white shadow-xl dark:border-slate-700/30 dark:bg-slate-900"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Renombrar chat"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm dark:bg-black/60"
+            onClick={() => { setRenameConversationId(null); setRenameTitle(''); }}
           >
-            <div className="border-b border-slate-200/50 px-6 py-4 dark:border-slate-700/30">
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Renombrar chat</h3>
-            </div>
-            <div className="px-6 py-4">
-              <input
-                value={renameTitle}
-                onChange={(e) => setRenameTitle(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveRename(); } }}
-                className="w-full rounded-lg border border-slate-200/60 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700/30 dark:bg-slate-800 dark:text-white dark:focus:border-blue-500"
-                autoFocus
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200/50 px-6 py-4 dark:border-slate-700/30">
-              <button
-                type="button"
-                onClick={() => { setRenameConversationId(null); setRenameTitle(''); }}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={!renameTitle.trim()}
-                className="rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:from-blue-600 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
-                onClick={saveRename}
-              >
-                Guardar
-              </button>
+            <div
+              className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200/50 bg-white shadow-xl dark:border-slate-700/30 dark:bg-slate-900"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Renombrar chat"
+            >
+              <div className="border-b border-slate-200/50 px-6 py-4 dark:border-slate-700/30">
+                <h3 id="rename-dialog-title" className="text-base font-semibold text-slate-900 dark:text-white">Renombrar chat</h3>
+              </div>
+              <div className="px-6 py-4">
+                <label htmlFor="rename-chat-input" className="sr-only">Nuevo nombre del chat</label>
+                <input
+                  id="rename-chat-input"
+                  aria-label="Nuevo nombre del chat"
+                  value={renameTitle}
+                  onChange={(e) => setRenameTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveRename(); } }}
+                  className="w-full rounded-lg border border-slate-200/60 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700/30 dark:bg-slate-800 dark:text-white dark:focus:border-blue-500"
+                  autoFocus
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200/50 px-6 py-4 dark:border-slate-700/30">
+                <button
+                  type="button"
+                  onClick={() => { setRenameConversationId(null); setRenameTitle(''); }}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={!renameTitle.trim()}
+                  className="rounded-lg bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:from-blue-600 hover:to-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={saveRename}
+                >
+                  Guardar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </FocusTrap>
       )}
 
       {/* ===== Delete Confirmation Modal ===== */}
       {deleteConversationId && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm dark:bg-black/60"
-          onClick={() => setDeleteConversationId(null)}
+        <FocusTrap
+          focusTrapOptions={{
+            initialFocus: () => document.activeElement as HTMLElement,
+            fallbackFocus: () => document.activeElement as HTMLElement,
+            escapeDeactivates: true,
+            onDeactivate: () => setDeleteConversationId(null),
+            returnFocusOnDeactivate: true,
+            allowOutsideClick: true,
+          }}
         >
           <div
-            className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200/50 bg-white shadow-xl dark:border-slate-700/30 dark:bg-slate-900"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Eliminar chat"
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm dark:bg-black/60"
+            onClick={() => setDeleteConversationId(null)}
           >
-            <div className="border-b border-slate-200/50 px-6 py-4 dark:border-slate-700/30">
-              <h3 className="text-base font-semibold text-slate-900 dark:text-white">Eliminar chat</h3>
-            </div>
-            <div className="px-6 py-4">
-              <p className="text-sm text-slate-600 dark:text-slate-400">¿Estás seguro de que quieres eliminar esta conversación? Esta acción no se puede deshacer.</p>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200/50 px-6 py-4 dark:border-slate-700/30">
-              <button
-                type="button"
-                onClick={() => setDeleteConversationId(null)}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700"
-                onClick={deleteConversation}
-              >
-                Eliminar
-              </button>
+            <div
+              className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200/50 bg-white shadow-xl dark:border-slate-700/30 dark:bg-slate-900"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Eliminar chat"
+            >
+              <div className="border-b border-slate-200/50 px-6 py-4 dark:border-slate-700/30">
+                <h3 id="delete-dialog-title" className="text-base font-semibold text-slate-900 dark:text-white">Eliminar chat</h3>
+              </div>
+              <div className="px-6 py-4">
+                <p id="delete-dialog-desc" className="text-sm text-slate-600 dark:text-slate-400">¿Estás seguro de que quieres eliminar esta conversación? Esta acción no se puede deshacer.</p>
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200/50 px-6 py-4 dark:border-slate-700/30">
+                <button
+                  type="button"
+                  onClick={() => setDeleteConversationId(null)}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700"
+                  onClick={deleteConversation}
+                >
+                  Eliminar
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </FocusTrap>
       )}
     </div>
   );

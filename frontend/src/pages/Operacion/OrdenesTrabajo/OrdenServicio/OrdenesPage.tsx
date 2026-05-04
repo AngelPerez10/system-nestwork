@@ -10,7 +10,7 @@ import { useDropzone } from "react-dropzone";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import DatePicker from "@/components/form/date-picker";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { PencilIcon, TrashBinIcon, TimeIcon } from "@/icons";
 import { MobileOrderList } from "./MobileOrderCard";
 import { ClienteFormModal } from "@/components/clientes/ClienteFormModal";
@@ -115,9 +115,8 @@ export default function Ordenes() {
   const canOrdenesEdit = !!permissions?.ordenes?.edit;
   const canOrdenesDelete = !!permissions?.ordenes?.delete;
 
-  const getToken = () => {
-    return localStorage.getItem("token") || sessionStorage.getItem("token");
-  };
+  // Auth is handled by httpOnly cookies (credentials: 'include' in fetch interceptor)
+  const getToken = () => "cookie";
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
@@ -169,8 +168,6 @@ export default function Ordenes() {
   }, []);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
     const now = Date.now();
     if (now - ordenesPagePermissionsLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
     ordenesPagePermissionsLastLoadAt = now;
@@ -178,7 +175,7 @@ export default function Ordenes() {
       try {
         const res = await fetch(apiUrl('/api/me/permissions/'), {
           method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
           cache: 'no-store' as RequestCache,
         });
         const data = await res.json().catch(() => null);
@@ -197,8 +194,6 @@ export default function Ordenes() {
   const [mySignatureUrl, setMySignatureUrl] = useState<string>('');
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
     const now = Date.now();
     if (now - ordenesPageSignatureLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
     ordenesPageSignatureLastLoadAt = now;
@@ -206,7 +201,7 @@ export default function Ordenes() {
       try {
         const res = await fetch(apiUrl('/api/me/signature/'), {
           method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
           cache: 'no-store' as RequestCache,
         });
         const data = await res.json().catch(() => null);
@@ -332,7 +327,7 @@ export default function Ordenes() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ public_id: publicId }),
         });
@@ -343,7 +338,7 @@ export default function Ordenes() {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ fotos_urls: updated }),
         });
@@ -488,7 +483,7 @@ export default function Ordenes() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ data_url: compressed, folder: 'ordenes/fotos' }),
         });
@@ -728,7 +723,7 @@ export default function Ordenes() {
 
       const res = await fetch(apiUrl(`/api/users/accounts/${userId}/signature/`), {
         method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
         cache: 'no-store' as RequestCache,
       });
       const data = await res.json().catch(() => null);
@@ -763,7 +758,7 @@ export default function Ordenes() {
 
       const response = await fetch(apiUrl(`/api/clientes/?${query.toString()}`), {
         headers: {
-          "Authorization": `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json"
         }
       });
@@ -786,11 +781,8 @@ export default function Ordenes() {
 
   const fetchUsuarios = async () => {
     try {
-      const token = getToken();
-      if (!token) return;
-
       const commonHeaders = {
-        "Authorization": `Bearer ${token}`,
+        ...getAuthHeaders(),
         "Content-Type": "application/json"
       } as HeadersInit;
 
@@ -810,16 +802,10 @@ export default function Ordenes() {
   };
 
   const loadServiciosDisponibles = async () => {
-    const token = getToken();
-    if (!token) {
-      setServiciosDisponibles([]);
-      return;
-    }
-
     try {
       const res = await fetch(apiUrl('/api/servicios/?page=1&page_size=500&ordering=idx'), {
         method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
         cache: 'no-store' as RequestCache,
       });
       const data = await res.json().catch(() => null);
@@ -848,17 +834,9 @@ export default function Ordenes() {
         setLoading(false);
         return;
       }
-      const token = getToken();
-      if (!token) {
-        console.warn("No hay token de autenticación");
-        setOrdenes([]);
-        setLoading(false);
-        return;
-      }
-
       const response = await fetch(apiUrl(`/api/ordenes/?_ts=${Date.now()}`), {
         headers: {
-          "Authorization": `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json"
         },
         cache: "no-store" as RequestCache,
@@ -949,7 +927,7 @@ export default function Ordenes() {
       const response = await fetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -977,7 +955,7 @@ export default function Ordenes() {
             await fetch(apiUrl(`/api/clientes/${cid}/`), {
               method: 'PATCH',
               headers: {
-                Authorization: `Bearer ${token}`,
+                ...getAuthHeaders(),
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify(updates),
@@ -1000,7 +978,7 @@ export default function Ordenes() {
               await fetch(apiUrl(`/api/cliente-contactos/${contactoIdToUpdate}/`), {
                 method: 'PATCH',
                 headers: {
-                  Authorization: `Bearer ${token}`,
+                  ...getAuthHeaders(),
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(body),
@@ -1027,7 +1005,7 @@ export default function Ordenes() {
           await fetch(apiUrl(`/api/ordenes/${savedOrden.id}/levantamiento/`), {
             method: 'PUT',
             headers: {
-              Authorization: `Bearer ${token}`,
+              ...getAuthHeaders(),
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -1095,7 +1073,7 @@ export default function Ordenes() {
                   const searchRes = await fetch(apiUrl(`/api/cotizaciones/?search=${searchParam}`), {
                     method: 'GET',
                     headers: {
-                      Authorization: `Bearer ${token}`,
+                      ...getAuthHeaders(),
                       'Content-Type': 'application/json',
                     },
                     cache: 'no-store' as RequestCache,
@@ -1119,7 +1097,7 @@ export default function Ordenes() {
                 const cotRes = await fetch(cotUrl, {
                   method: cotMethod,
                   headers: {
-                    Authorization: `Bearer ${token}`,
+                    ...getAuthHeaders(),
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify(cotPayload),
@@ -1253,7 +1231,7 @@ export default function Ordenes() {
     try {
       const response = await fetch(apiUrl(`/api/ordenes/${ordenToDelete.id}/`), {
         method: "DELETE",
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { ...getAuthHeaders() }
       });
 
       if (response.ok) {
@@ -1362,7 +1340,7 @@ export default function Ordenes() {
         if (!token) return;
         try {
           const res = await fetch(apiUrl(`/api/ordenes/${id}/`), {
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
             cache: "no-store" as RequestCache,
           });
           if (res.ok) {

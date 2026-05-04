@@ -2,6 +2,9 @@ from .base import *
 
 DEBUG = env.bool("DJANGO_DEBUG", default=True)
 
+# Local dev: session cookies + long JWT (see JWT_ACCESS_MINUTES) so closing the browser drops cookies.
+AUTH_JWT_SESSION_COOKIES = env.bool("AUTH_JWT_SESSION_COOKIES", default=True)
+
 # SECRET_KEY is now required in base.py for security
 # Set DJANGO_SECRET_KEY in your .env file (even for development)
 # python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
@@ -25,13 +28,45 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}:(5173|4173|8000)$",
 ]
 
-# En desarrollo permite acceder por IP LAN sin romper por DisallowedHost.
-ALLOWED_HOSTS = ["*"]
+# Development ALLOWED_HOSTS: explicit list, never wildcard.
+# Wildcard ("*") enables Host header injection that bypasses multi-tenant resolution.
+# If you need to access from LAN IP, set ALLOWED_HOSTS in your .env file.
+ALLOWED_HOSTS = env.list(
+    "ALLOWED_HOSTS",
+    default=[
+        "localhost",
+        "127.0.0.1",
+        "localtest.me",
+        "*.localtest.me",
+    ],
+)
+
+# Fail-fast: reject wildcard in any environment (including dev)
+if "*" in ALLOWED_HOSTS:
+    raise ImproperlyConfigured(
+        "ALLOWED_HOSTS must NOT contain '*'. "
+        "Use explicit hostnames (e.g. ['localhost', '127.0.0.1', '192.168.1.100'])."
+    )
 
 # Dev-only: Cookies no seguras para desarrollo local
 # En production.py se fuerzan a True
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
+
+# Dev-only: CSP relaxed for Vite HMR (hot module replacement)
+# In production, these are restricted to "'self'" only
+CSP_SCRIPT_SRC = ["'self'", "'unsafe-inline'", "'unsafe-eval'"]  # Vite HMR needs inline+eval
+CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]  # Tailwind + Vite HMR styles
+CSP_CONNECT_SRC = [
+    "'self'",
+    "ws://localhost:*",  # Vite HMR WebSocket
+    "ws://127.0.0.1:*",
+    "ws://*.localtest.me:*",
+    "http://localhost:*",
+    "http://127.0.0.1:*",
+    "http://*.localtest.me:*",
+]
+CSP_UPGRADE_INSECURE = False  # Don't upgrade in dev (HTTP is fine locally)
 
 # Dev-only: do not use in production
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

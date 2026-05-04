@@ -45,3 +45,13 @@ export function resolveMediaUrl(url: string | null | undefined): string {
 }
 export const PUBLIC_ORIGIN = (import.meta.env.VITE_PUBLIC_ORIGIN || (isBrowser ? window.location.origin : '')).replace(/\/$/, '');
 export const publicUrl = (path: string) => `${PUBLIC_ORIGIN}${path}`;
+
+/**
+ * Auth headers for API requests.
+ * With httpOnly cookie-based auth, no Authorization header is needed —
+ * the fetch interceptor in authSession.ts adds credentials: 'include'
+ * which sends cookies automatically.
+ *
+ * This function exists for backwards compatibility and returns empty headers.
+ */
+export const getAuthHeaders = (): Record<string, string> => ({});

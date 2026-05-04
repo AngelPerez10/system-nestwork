@@ -22,6 +22,30 @@ from api.modules.users.services import (
 logger = logging.getLogger(__name__)
 
 
+def _attach_jwt_cookies(response, refresh: RefreshToken) -> None:
+    """Set httpOnly JWT cookies; max_age matches SIMPLE_JWT unless session-cookie mode is on."""
+    sj = settings.SIMPLE_JWT
+    is_debug = getattr(settings, "DEBUG", False)
+    session_mode = getattr(settings, "AUTH_JWT_SESSION_COOKIES", False)
+    access_max = None if session_mode else int(sj["ACCESS_TOKEN_LIFETIME"].total_seconds())
+    refresh_max = None if session_mode else int(sj["REFRESH_TOKEN_LIFETIME"].total_seconds())
+    common = {"httponly": True, "secure": not is_debug, "samesite": "Lax"}
+    response.set_cookie(
+        key="access_token",
+        value=str(refresh.access_token),
+        max_age=access_max,
+        path="/",
+        **common,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=str(refresh),
+        max_age=refresh_max,
+        path="/api/token/refresh/",
+        **common,
+    )
+
+
 def _sync_user_from_public_to_current_schema(user_identifier: str, by_email: bool = False):
     """
     Ensure auth user exists in current tenant schema, cloning from public if needed.
@@ -229,42 +253,21 @@ def login(request):
         "platform_role": profile.platform_role,
     })
     
-    # Development: Check if we're in DEBUG mode to set secure=False
-    from django.conf import settings
-    is_debug = getattr(settings, 'DEBUG', False)
-    
-    # Access token cookie (short-lived)
-    response.set_cookie(
-        key='access_token',
-        value=str(refresh.access_token),
-        max_age=60 * 20,  # 20 minutes
-        httponly=True,
-        secure=not is_debug,  # HTTPS only in production
-        samesite='Lax',
-        path='/',
-    )
-    
-    # Refresh token cookie (longer-lived)
-    response.set_cookie(
-        key='refresh_token',
-        value=str(refresh),
-        max_age=60 * 60 * 24 * 7,  # 7 days
-        httponly=True,
-        secure=not is_debug,  # HTTPS only in production
-        samesite='Lax',
-        path='/api/token/refresh/',  # Only send to refresh endpoint
-    )
-    
+    _attach_jwt_cookies(response, refresh)
+
     return response
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def refresh_token(request):
     """
     Refresh access token using refresh token from httpOnly cookie.
     Security: Token is read from cookie, not from request body.
     """
+    from django.conf import settings as django_settings
+    from rest_framework_simplejwt.exceptions import TokenError as JWTTokenError
+
     refresh_token_raw = request.COOKIES.get('refresh_token')
     
     if not refresh_token_raw:
@@ -274,38 +277,36 @@ def refresh_token(request):
         )
     
     try:
-        refresh = RefreshToken(refresh_token_raw)
-        # Rotate refresh token for security
-        refresh.rotate()
+        old_refresh = RefreshToken(refresh_token_raw)
+        
+        # Rotate: blacklist old token and issue new one for same user
+        old_refresh.blacklist()
+        
+        # Get user from old token to create new one
+        User = get_user_model()
+        user_id = old_refresh.payload.get("user_id")
+        user = User.objects.get(pk=user_id)
+        new_refresh = RefreshToken.for_user(user)
         
         response = Response({"success": True})
-        
-        # Set new access token cookie
-        response.set_cookie(
-            key='access_token',
-            value=str(refresh.access_token),
-            max_age=60 * 20,  # 20 minutes
-            httponly=True,
-            secure=True,
-            samesite='Lax',
-            path='/',
-        )
-        
-        # Set new refresh token cookie
-        response.set_cookie(
-            key='refresh_token',
-            value=str(refresh),
-            max_age=60 * 60 * 24 * 7,  # 7 days
-            httponly=True,
-            secure=True,
-            samesite='Lax',
-            path='/api/token/refresh/',
-        )
-        
+        _attach_jwt_cookies(response, new_refresh)
+
         return response
         
-    except Exception as e:
-        logger.warning(f"Token refresh failed: {e}")
+    except User.DoesNotExist:
+        logger.warning("Token refresh failed: user not found")
+        return Response(
+            {"detail": "Invalid or expired refresh token"},
+            status=401
+        )
+    except JWTTokenError:
+        logger.warning("Token refresh failed: invalid or expired token")
+        return Response(
+            {"detail": "Invalid or expired refresh token"},
+            status=401
+        )
+    except Exception:
+        logger.exception("Token refresh unexpected error")
         return Response(
             {"detail": "Invalid or expired refresh token"},
             status=401
@@ -330,7 +331,7 @@ def logout(request):
                 refresh = RefreshToken(refresh_token_raw)
                 refresh.blacklist()
             except Exception:
-                pass  # Token may already be expired
+                pass  # Token may already be expired or invalid — safe to ignore
         
         # Audit logout event
         audit_security_event(

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiUrl } from '@/config/api';
+import { clearClientAuthSession } from '@/utils/authSession';
 
 export type AuthRole = 'superadmin' | 'admin' | 'tecnico' | null;
 
@@ -153,17 +154,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (!response.ok) {
-        throw new Error('Token refresh failed');
+        if (response.status === 401) {
+          await logout();
+        }
+        return;
       }
 
-      // New tokens are set in cookies by backend
       setAuthState(prev => ({
         ...prev,
         isAuthenticated: true,
       }));
     } catch (error) {
       console.error('Failed to refresh token:', error);
-      logout();
+      // Network / transport errors: do not clear session (same as /api/me/).
     }
   };
 
@@ -189,11 +192,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Security: Tokens are in httpOnly cookies, so we check with backend
   useEffect(() => {
     let interval: number | null = null;
+    const ME_POLL_MS = 5 * 60 * 1000;
+
+    const clearUnauthenticated = () => {
+      Object.values(AUTH_STORAGE_KEYS).forEach((key) => removeStoredItem(key));
+      clearClientAuthSession();
+      setAuthState(prev => ({
+        ...prev,
+        isAuthenticated: false,
+        isLoading: false,
+        role: null,
+        isSuperadmin: false,
+        isAdmin: false,
+        username: null,
+        email: null,
+        user: null,
+      }));
+      if (interval != null) {
+        window.clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    const applyUserFromMe = (userData: Record<string, unknown>) => {
+      const role = (userData.platform_role as string | undefined)?.toLowerCase() === 'superadmin' || userData.is_superuser
+        ? 'superadmin'
+        : (userData.role as string | undefined)?.toLowerCase() === 'admin' || userData.is_staff
+          ? 'admin'
+          : 'tecnico';
+
+      const isSuperadmin = role === 'superadmin';
+
+      setStoredItem(AUTH_STORAGE_KEYS.USERNAME, String(userData.username ?? ''));
+      setStoredItem(AUTH_STORAGE_KEYS.EMAIL, String(userData.email ?? ''));
+      setStoredItem(AUTH_STORAGE_KEYS.ROLE, role);
+      setStoredItem(AUTH_STORAGE_KEYS.IS_SUPERADMIN, String(isSuperadmin));
+
+      setAuthState(prev => ({
+        ...prev,
+        isAuthenticated: true,
+        isLoading: false,
+        role,
+        isSuperadmin,
+        isAdmin: role === 'admin' || isSuperadmin,
+        username: userData.username != null ? String(userData.username) : null,
+        email: userData.email != null ? String(userData.email) : null,
+        user: userData,
+      }));
+
+      if (interval == null) {
+        interval = window.setInterval(checkAuth, ME_POLL_MS);
+      }
+    };
+
+    const tryRecoverSessionAfter401 = async (): Promise<boolean> => {
+      try {
+        const rRef = await fetch(apiUrl('/api/token/refresh/'), {
+          method: 'POST',
+          credentials: 'include',
+        });
+        if (!rRef.ok) return false;
+        const rMe = await fetch(apiUrl('/api/me/'), {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (!rMe.ok) return false;
+        const userData = await rMe.json() as Record<string, unknown>;
+        applyUserFromMe(userData);
+        return true;
+      } catch {
+        return false;
+      }
+    };
 
     const checkAuth = async () => {
       if (authBootstrapInFlight) return;
       try {
         authBootstrapInFlight = true;
+
+        if (typeof document !== 'undefined' && document.hidden && interval != null) {
+          return;
+        }
+
         const onSignInPage = window.location.pathname === '/signin';
         const hasStoredSessionHint = Boolean(
           getStoredItem(AUTH_STORAGE_KEYS.USERNAME) ||
@@ -205,71 +285,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // Try to get current user from backend (uses cookie auth)
         const response = await fetch(apiUrl('/api/me/'), {
           method: 'GET',
-          credentials: 'include',  // Send access token cookie
+          credentials: 'include',
         });
 
         if (response.ok) {
-          const userData = await response.json();
-          
-          // User is authenticated, update state
-          const role = userData.platform_role?.toLowerCase() === 'superadmin' || userData.is_superuser
-            ? 'superadmin'
-            : userData.role?.toLowerCase() === 'admin' || userData.is_staff
-              ? 'admin'
-              : 'tecnico';
-          
-          const isSuperadmin = role === 'superadmin';
-          
-          setStoredItem(AUTH_STORAGE_KEYS.USERNAME, userData.username);
-          setStoredItem(AUTH_STORAGE_KEYS.EMAIL, userData.email);
-          setStoredItem(AUTH_STORAGE_KEYS.ROLE, role);
-          setStoredItem(AUTH_STORAGE_KEYS.IS_SUPERADMIN, String(isSuperadmin));
-          
-          setAuthState(prev => ({
-            ...prev,
-            isAuthenticated: true,
-            isLoading: false,
-            role,
-            isSuperadmin,
-            isAdmin: role === 'admin' || isSuperadmin,
-            username: userData.username,
-            email: userData.email,
-            user: userData,
-          }));
-
-          // Only poll when authenticated.
-          if (interval == null) {
-            interval = window.setInterval(checkAuth, 60000);
+          const userData = await response.json() as Record<string, unknown>;
+          applyUserFromMe(userData);
+        } else if (response.status === 401) {
+          const recovered = await tryRecoverSessionAfter401();
+          if (!recovered) {
+            clearUnauthenticated();
           }
         } else {
-          // Not authenticated
           setAuthState(prev => ({
             ...prev,
-            isAuthenticated: false,
             isLoading: false,
-            role: null,
-            isSuperadmin: false,
-            isAdmin: false,
-            username: null,
-            email: null,
-            user: null,
+            isAuthenticated: prev.isAuthenticated,
           }));
-
-          if (interval != null) {
-            window.clearInterval(interval);
-            interval = null;
-          }
         }
       } catch (error) {
         console.error('Auth check failed:', error);
-        setAuthState(prev => ({ ...prev, isLoading: false, isAuthenticated: false }));
-        if (interval != null) {
-          window.clearInterval(interval);
-          interval = null;
-        }
+        setAuthState(prev => ({
+          ...prev,
+          isLoading: false,
+          isAuthenticated: prev.isAuthenticated,
+        }));
       } finally {
         authBootstrapInFlight = false;
       }

@@ -67,6 +67,10 @@ class ContentSecurityPolicyMiddleware:
     validation and output encoding, but adds an extra layer of protection.
     
     OWASP 2025: A02: Security Misconfiguration
+    
+    Note: X-XSS-Protection header is intentionally omitted.
+    It is deprecated in modern browsers and can cause rendering issues.
+    Use CSP instead for XSS prevention.
     """
     
     def __init__(self, get_response):
@@ -75,87 +79,26 @@ class ContentSecurityPolicyMiddleware:
         # Get CSP configuration from settings
         self.csp_report_only = getattr(settings, 'CSP_REPORT_ONLY', False)
         self.csp_report_uri = getattr(settings, 'CSP_REPORT_URI', None)
+        self.upgrade_insecure = getattr(settings, 'CSP_UPGRADE_INSECURE', False)
         
         # Default policies (can be overridden in settings)
-        self.default_src = getattr(
-            settings, 'CSP_DEFAULT_SRC',
-            ["'self'"]
-        )
-        
-        self.script_src = getattr(
-            settings, 'CSP_SCRIPT_SRC',
-            ["'self'"]  # Strict: no inline scripts, no eval
-        )
-        
-        self.style_src = getattr(
-            settings, 'CSP_STYLE_SRC',
-            ["'self'", "'unsafe-inline'"]  # unsafe-inline needed for some CSS frameworks
-        )
-        
-        self.img_src = getattr(
-            settings, 'CSP_IMG_SRC',
-            ["'self'", "data:", "https:"]  # Allow data: for base64 images
-        )
-        
-        self.font_src = getattr(
-            settings, 'CSP_FONT_SRC',
-            ["'self'", "https:"]
-        )
-        
-        self.connect_src = getattr(
-            settings, 'CSP_CONNECT_SRC',
-            ["'self'"]
-        )
-        
-        self.media_src = getattr(
-            settings, 'CSP_MEDIA_SRC',
-            ["'self'"]
-        )
-        
-        self.frame_ancestors = getattr(
-            settings, 'CSP_FRAME_ANCESTORS',
-            ["'none'"]  # Prevent clickjacking
-        )
-        
-        self.base_uri = getattr(
-            settings, 'CSP_BASE_URI',
-            ["'self'"]
-        )
-        
-        self.form_action = getattr(
-            settings, 'CSP_FORM_ACTION',
-            ["'self'"]
-        )
-        
-        self.frame_src = getattr(
-            settings, 'CSP_FRAME_SRC',
-            ["'none'"]
-        )
-        
-        self.worker_src = getattr(
-            settings, 'CSP_WORKER_SRC',
-            ["'self'", "blob:"]
-        )
-        
-        self.child_src = getattr(
-            settings, 'CSP_CHILD_SRC',
-            ["'self'"]
-        )
-        
-        self.manifest_src = getattr(
-            settings, 'CSP_MANIFEST_SRC',
-            ["'self'"]
-        )
-        
-        self.prefetch_src = getattr(
-            settings, 'CSP_PREFETCH_SRC',
-            ["'self'"]
-        )
-        
-        self.navigate_to = getattr(
-            settings, 'CSP_NAVIGATE_TO',
-            ["'self'"]
-        )
+        self.default_src = getattr(settings, 'CSP_DEFAULT_SRC', ["'self'"])
+        self.script_src = getattr(settings, 'CSP_SCRIPT_SRC', ["'self'"])
+        self.style_src = getattr(settings, 'CSP_STYLE_SRC', ["'self'", "'unsafe-inline'"])
+        self.img_src = getattr(settings, 'CSP_IMG_SRC', ["'self'", "data:", "https:"])
+        self.font_src = getattr(settings, 'CSP_FONT_SRC', ["'self'", "https:"])
+        self.connect_src = getattr(settings, 'CSP_CONNECT_SRC', ["'self'"])
+        self.media_src = getattr(settings, 'CSP_MEDIA_SRC', ["'self'"])
+        self.object_src = getattr(settings, 'CSP_OBJECT_SRC', ["'none'"])
+        self.frame_ancestors = getattr(settings, 'CSP_FRAME_ANCESTORS', ["'none'"])
+        self.base_uri = getattr(settings, 'CSP_BASE_URI', ["'self'"])
+        self.form_action = getattr(settings, 'CSP_FORM_ACTION', ["'self'"])
+        self.frame_src = getattr(settings, 'CSP_FRAME_SRC', ["'none'"])
+        self.worker_src = getattr(settings, 'CSP_WORKER_SRC', ["'self'", "blob:"])
+        self.child_src = getattr(settings, 'CSP_CHILD_SRC', ["'self'"])
+        self.manifest_src = getattr(settings, 'CSP_MANIFEST_SRC', ["'self'"])
+        self.prefetch_src = getattr(settings, 'CSP_PREFETCH_SRC', ["'self'"])
+        self.navigate_to = getattr(settings, 'CSP_NAVIGATE_TO', None)
         
         # Build CSP header value
         self.csp_value = self._build_csp_header()
@@ -177,6 +120,7 @@ class ContentSecurityPolicyMiddleware:
             'font-src': self.font_src,
             'connect-src': self.connect_src,
             'media-src': self.media_src,
+            'object-src': self.object_src,
             'frame-ancestors': self.frame_ancestors,
             'base-uri': self.base_uri,
             'form-action': self.form_action,
@@ -187,6 +131,13 @@ class ContentSecurityPolicyMiddleware:
             'prefetch-src': self.prefetch_src,
         }
         
+        # Add optional directives
+        if self.navigate_to:
+            directives['navigate-to'] = self.navigate_to
+        
+        if self.upgrade_insecure:
+            directives['upgrade-insecure-requests'] = []
+        
         # Add report-uri if configured
         if self.csp_report_uri:
             directives['report-uri'] = [self.csp_report_uri]
@@ -195,8 +146,12 @@ class ContentSecurityPolicyMiddleware:
         # Build header string
         csp_parts = []
         for directive, sources in directives.items():
-            if sources:
-                csp_parts.append(f"{directive} {' '.join(sources)}")
+            if sources is not None:
+                if sources:
+                    csp_parts.append(f"{directive} {' '.join(sources)}")
+                else:
+                    # upgrade-insecure-requests has no value
+                    csp_parts.append(directive)
         
         return '; '.join(csp_parts)
     
@@ -206,10 +161,10 @@ class ContentSecurityPolicyMiddleware:
         # Add CSP header
         response[self.header_name] = self.csp_value
         
-        # Add additional security headers
+        # Security headers
+        # Note: X-XSS-Protection is intentionally NOT set (deprecated, can cause issues)
         response['X-Content-Type-Options'] = 'nosniff'
         response['X-Frame-Options'] = 'DENY'
-        response['X-XSS-Protection'] = '1; mode=block'
         response['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         response['Permissions-Policy'] = (
             'accelerometer=(), camera=(), geolocation=(), gyroscope=(), '
@@ -232,14 +187,14 @@ def add_security_headers(get_response):
     """
     Simple security headers middleware.
     Use this if you don't need full CSP configuration.
+    Note: X-XSS-Protection is intentionally omitted (deprecated).
     """
     def middleware(request):
         response = get_response(request)
         
-        # Basic security headers
+        # Security headers (X-XSS-Protection intentionally omitted - deprecated)
         response['X-Content-Type-Options'] = 'nosniff'
         response['X-Frame-Options'] = 'DENY'
-        response['X-XSS-Protection'] = '1; mode=block'
         response['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         
         # Basic CSP
@@ -247,9 +202,10 @@ def add_security_headers(get_response):
             "default-src 'self'; "
             "script-src 'self'; "
             "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https:; "
-            "font-src 'self' https:; "
+            "img-src 'self' data: https: blob:; "
+            "font-src 'self' data:; "
             "connect-src 'self'; "
+            "object-src 'none'; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
             "form-action 'self'"

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import PageMeta from '@/components/common/PageMeta';
 import { Link, useNavigate } from 'react-router-dom';
 import ComponentCard from '@/components/common/ComponentCard';
@@ -229,28 +229,38 @@ const superadminService = {
   },
 };
 
-/** Usuarios que pueden asignar permisos (ver/crear/editar/eliminar) a otros, incluidos administradores. */
-const PERMISSION_DELEGATION_USERNAMES = new Set(['angelperez10', 'ivancruz01']);
-
-const getSessionUsernameNorm = (): string => {
+/** Any admin user can assign permissions to others. */
+const canDelegateUserPermissions = (): boolean => {
   try {
-    const direct = (localStorage.getItem('username') || sessionStorage.getItem('username') || '').trim();
-    if (direct) return direct.toLowerCase();
-    const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
-    if (raw) {
-      const u = JSON.parse(raw) as { username?: string };
-      if (u?.username) return String(u.username).trim().toLowerCase();
+    const roleRaw = (localStorage.getItem('role') || sessionStorage.getItem('role') || '').trim().toLowerCase();
+    if (roleRaw === 'superadmin' || roleRaw === 'admin') return true;
+    const superRaw = localStorage.getItem('is_superuser') || sessionStorage.getItem('is_superuser');
+    if (superRaw && String(superRaw).toLowerCase() === 'true') return true;
+    const staffRaw = localStorage.getItem('is_staff') || sessionStorage.getItem('is_staff');
+    if (staffRaw && String(staffRaw).toLowerCase() === 'true') return true;
+    const userRaw = localStorage.getItem('user') || sessionStorage.getItem('user');
+    if (userRaw) {
+      const u = JSON.parse(userRaw);
+      if (u?.is_superuser || u?.is_staff) return true;
+      const pr = String(u?.platform_role || '').toUpperCase();
+      if (pr === 'SUPERADMIN' || pr === 'ADMIN_EMPRESA') return true;
     }
   } catch {
     /* ignore */
   }
-  return '';
+  return false;
 };
 
-const canDelegateUserPermissions = (): boolean => PERMISSION_DELEGATION_USERNAMES.has(getSessionUsernameNorm());
-
-const isProtectedPrincipalUsername = (username: string): boolean =>
-  PERMISSION_DELEGATION_USERNAMES.has((username || '').trim().toLowerCase());
+/** Prevent deactivating superadmin users from the UI. */
+const isProtectedPrincipalUsername = (username: string): boolean => {
+  // Only protect if the current user is the same user trying to deactivate themselves
+  try {
+    const current = (localStorage.getItem('username') || sessionStorage.getItem('username') || '').trim().toLowerCase();
+    return !!current && current === (username || '').trim().toLowerCase();
+  } catch {
+    return false;
+  }
+};
 
 const SYSTEM_ACTIVITY_LOG_KEY = 'system_activity_log';
 
@@ -412,7 +422,6 @@ export default function UserProfiles() {
   const [permsOpenSections, setPermsOpenSections] = useState<Record<string, boolean>>({});
 
   const didInitRef = useRef(false);
-  const canDelegatePerms = canDelegateUserPermissions();
 
   const normalizePerms = (p: any): Required<PermissionsPayload> => {
     const base: Required<PermissionsPayload> = {
@@ -480,7 +489,6 @@ export default function UserProfiles() {
   };
 
   const setPerm = (area: keyof Required<PermissionsPayload>, key: keyof CrudPerms, value: boolean) => {
-    if (!canDelegateUserPermissions()) return;
     setPermsForm((prev) => {
       const cur = normalizePerms(prev);
       return {
@@ -495,10 +503,6 @@ export default function UserProfiles() {
 
   const savePerms = async () => {
     if (!permsUser) return;
-    if (!canDelegateUserPermissions()) {
-      setPermsError('Solo Angel Pérez e Ivan Cruz pueden modificar permisos de usuarios.');
-      return;
-    }
     setPermsError(null);
     setSuccess(null);
     setPermsSaving(true);
@@ -678,7 +682,7 @@ export default function UserProfiles() {
     }
   }, []);
 
-  const loadSuperadminData = async () => {
+  const loadSuperadminData = useCallback(async () => {
     if (!isPlatformSuperuser) return;
     setCompanyLoading(true);
     try {
@@ -691,13 +695,12 @@ export default function UserProfiles() {
     } finally {
       setCompanyLoading(false);
     }
-  };
+  }, [isPlatformSuperuser]);
 
   useEffect(() => {
     if (!isPlatformSuperuser) return;
     loadSuperadminData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlatformSuperuser]);
+  }, [isPlatformSuperuser, loadSuperadminData]);
 
   const currentOrg = useMemo(() => {
     try {
@@ -2000,16 +2003,6 @@ export default function UserProfiles() {
               </header>
 
               <div className="custom-scrollbar max-h-[min(76vh,720px)] min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#fffdfa] px-4 py-4 dark:bg-[#111a2b] sm:px-5">
-                {!canDelegatePerms && !permsLoading && (
-                  <div className="mb-4">
-                    <Alert
-                      variant="info"
-                      title="Solo lectura"
-                      message="Solo los usuarios Angel Pérez e Ivan Cruz pueden activar o quitar permisos (ver, crear, editar, eliminar) de otros usuarios, incluidos administradores."
-                      showLink={false}
-                    />
-                  </div>
-                )}
                 {permsError && (
                   <div className="mb-4">
                     <Alert variant="error" title="Error" message={permsError} showLink={false} />
@@ -2215,13 +2208,10 @@ export default function UserProfiles() {
                                                   type="button"
                                                   role="switch"
                                                   aria-checked={checked}
-                                                  disabled={!canDelegatePerms}
-                                                  title={!canDelegatePerms ? 'Sin permiso para cambiar' : undefined}
                                                   onClick={() => {
-                                                    if (!canDelegatePerms) return;
                                                     setPerm(m.key, k, !checked);
                                                   }}
-                                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 active:scale-[0.98] ${checked ? 'bg-[#ff801f]' : 'bg-gray-300 dark:bg-gray-700'} ${!canDelegatePerms ? 'cursor-not-allowed opacity-55' : ''}`}
+                                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 active:scale-[0.98] ${checked ? 'bg-[#ff801f]' : 'bg-gray-300 dark:bg-gray-700'}`}
                                                 >
                                                   <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200 ease-out ${checked ? 'translate-x-4' : 'translate-x-1'}`} />
                                                 </button>
@@ -2280,8 +2270,7 @@ export default function UserProfiles() {
                   </button>
                   <button
                     type="button"
-                    disabled={permsSaving || permsLoading || !permsUser || !canDelegatePerms}
-                    title={!canDelegatePerms ? 'Solo Angel Pérez e Ivan Cruz pueden guardar cambios' : undefined}
+                    disabled={permsSaving || permsLoading || !permsUser}
                     onClick={savePerms}
                     className="inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#ff801f] px-4 text-sm font-medium text-black transition-colors hover:bg-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 active:brightness-95 disabled:opacity-60 sm:w-auto"
                   >

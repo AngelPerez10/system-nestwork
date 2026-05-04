@@ -9,11 +9,12 @@ export default function RequireAuth({ children }: RequireAuthProps) {
   const location = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
 
-  // Show nothing while loading auth state
+  // Show loading spinner while checking auth state with backend
+  // Security: AuthContext checks httpOnly cookie validity with /api/me/ endpoint
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600" role="status" aria-label="Cargando autenticación"></div>
       </div>
     );
   }

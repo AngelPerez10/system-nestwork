@@ -7,7 +7,7 @@ import ComponentCard from "@/components/common/ComponentCard";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import Alert from "@/components/ui/alert/Alert";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { PencilIcon, TrashBinIcon } from "@/icons";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
@@ -35,8 +35,6 @@ type AlertState = {
   title: string;
   message: string;
 };
-
-const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 
 const roundConceptoPrecio = (n: number) => Math.round(Math.max(0, n) * 100) / 100;
 
@@ -257,12 +255,11 @@ export default function Servicios() {
   const deleteConceptoCloudinary = async (url: string) => {
     const publicId = getPublicIdFromUrl(url);
     if (!publicId) return;
-    const token = getToken();
     await fetch(apiUrl("/api/ordenes/delete-image/"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({ public_id: publicId }),
     });
@@ -291,15 +288,10 @@ export default function Servicios() {
     };
   }, []);
 
-  const fetchServicios = async (page = 1, search = ""): Promise<Servicio[]> => {
+  const fetchServicios = useCallback(async (page = 1, search = ""): Promise<Servicio[]> => {
     if (!canServiciosView) {
       setServicios([]);
       setTotalCount(0);
-      setLoading(false);
-      return [];
-    }
-    const token = getToken();
-    if (!token) {
       setLoading(false);
       return [];
     }
@@ -331,7 +323,7 @@ export default function Servicios() {
     try {
       const res = await fetch(apiUrl(`/api/servicios/?${query.toString()}`), {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
         cache: "no-store" as RequestCache,
         signal: controller.signal,
       });
@@ -360,20 +352,14 @@ export default function Servicios() {
         inFlightKeyRef.current = null;
       }
     }
-  };
+  }, [canServiciosView, itemsPerPage]);
 
   useEffect(() => {
     fetchServicios(currentPage, debouncedSearch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canServiciosView, currentPage, debouncedSearch]);
+  }, [fetchServicios, currentPage, debouncedSearch]);
 
-  const fetchConceptos = async () => {
+  const fetchConceptos = useCallback(async () => {
     if (!canServiciosView) {
-      setConceptos([]);
-      return;
-    }
-    const token = getToken();
-    if (!token) {
       setConceptos([]);
       return;
     }
@@ -381,7 +367,7 @@ export default function Servicios() {
     try {
       const res = await fetch(apiUrl("/api/conceptos/?ordering=folio"), {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
         cache: "no-store" as RequestCache,
       });
       const data = await res.json().catch(() => ({ results: [] }));
@@ -403,12 +389,11 @@ export default function Servicios() {
     } finally {
       setLoadingConceptos(false);
     }
-  };
+  }, [canServiciosView]);
 
   useEffect(() => {
     fetchConceptos();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canServiciosView]);
+  }, [fetchConceptos]);
 
   const filteredConceptos = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -438,12 +423,11 @@ export default function Servicios() {
     setConceptoImageUploading(true);
     try {
       const compressed = await compressImage(file, 80, 1400, 1400);
-      const token = getToken();
       const resp = await fetch(apiUrl("/api/ordenes/upload-image/"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ data_url: compressed, folder: CONCEPTO_IMAGEN_FOLDER }),
       });
@@ -574,8 +558,6 @@ export default function Servicios() {
 
   const handleConfirmDelete = async () => {
     if (!servicioToDelete) return;
-    const token = getToken();
-    if (!token) return;
 
     if (!canServiciosDelete) {
       setAlert({ show: true, variant: "warning", title: "Sin permiso", message: "No tienes permiso para eliminar servicios." });
@@ -586,7 +568,7 @@ export default function Servicios() {
     try {
       const res = await fetch(apiUrl(`/api/servicios/${servicioToDelete.id}/`), {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -627,12 +609,6 @@ export default function Servicios() {
       return;
     }
 
-    const token = getToken();
-    if (!token) {
-      setModalError("No hay token de sesión.");
-      return;
-    }
-
     const url = editingServicio ? apiUrl(`/api/servicios/${editingServicio.id}/`) : apiUrl("/api/servicios/");
     const method = editingServicio ? "PUT" : "POST";
     const nombreServicio = formData.nombre;
@@ -642,7 +618,7 @@ export default function Servicios() {
       const response = await fetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -723,11 +699,6 @@ export default function Servicios() {
       setConceptoModalError("Faltan campos requeridos: Folio y Concepto.");
       return;
     }
-    const token = getToken();
-    if (!token) {
-      setConceptoModalError("No hay token de sesión.");
-      return;
-    }
     const basePrecio = Number(conceptoFormData.precio1 || 0);
     const precio1 = roundConceptoPrecio(basePrecio);
     const payload = {
@@ -741,7 +712,7 @@ export default function Servicios() {
     try {
       const response = await fetch(url, {
         method,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
@@ -768,8 +739,6 @@ export default function Servicios() {
 
   const handleConfirmDeleteConcepto = async () => {
     if (!conceptoToDelete) return;
-    const token = getToken();
-    if (!token) return;
     if (!canServiciosDelete) {
       setAlert({ show: true, variant: "warning", title: "Sin permiso", message: "No tienes permiso para eliminar conceptos." });
       setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 2500);
@@ -778,7 +747,7 @@ export default function Servicios() {
     try {
       const res = await fetch(apiUrl(`/api/conceptos/${conceptoToDelete.id}/`), {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");

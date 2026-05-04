@@ -306,7 +306,6 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
   useEffect(() => {
     if (!fixedTipo) return;
     setFormData((prev: any) => ({ ...prev, tipo: fixedTipo }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fixedTipo]);
 
   const estadosOptions = estadosPorPais[formData.pais || "México"] || estadosPorPais["México"] || [];

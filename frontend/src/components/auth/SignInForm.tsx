@@ -7,7 +7,16 @@ import { apiUrl } from "@/config/api";
 import { motion } from "motion/react";
 import { useAuth } from "@/context/AuthContext";
 
-async function login(loginValue: string, password: string) {
+interface LoginResponse {
+  username: string;
+  email: string;
+  is_staff: boolean;
+  is_superuser: boolean;
+  role: string;
+  platform_role?: string;
+}
+
+async function login(loginValue: string, password: string): Promise<LoginResponse> {
   const res = await fetch(apiUrl("/api/login/"), {
     method: "POST",
     credentials: 'include',  // Include cookies for httpOnly tokens
@@ -22,7 +31,7 @@ async function login(loginValue: string, password: string) {
   });
   const data = await res.json().catch(() => ({ detail: "Respuesta inválida" }));
   if (!res.ok) throw new Error(data.detail || "Error");
-  return data;
+  return data as LoginResponse;
 }
 
 export default function SignInForm() {
@@ -34,9 +43,9 @@ export default function SignInForm() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const navigate = useNavigate();
-  const location = useLocation() as any;
+  const location = useLocation();
 
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
@@ -50,7 +59,7 @@ export default function SignInForm() {
 
       // Redirigir según el rol del usuario
       const isAdmin = data.is_superuser || data.is_staff;
-      const from = location?.state?.from?.pathname;
+      const from = (location?.state?.from as any)?.pathname;
 
       let to = '/dashboard';
       if (isAdmin) {
@@ -62,8 +71,9 @@ export default function SignInForm() {
       }
 
       navigate(to, { replace: true });
-    } catch (err: any) {
-      setMessage(err.message || 'Error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error';
+      setMessage(message);
     } finally {
       setLoading(false);
     }
@@ -96,15 +106,18 @@ export default function SignInForm() {
             visible: { opacity: 1, y: 0, transition: { duration: 0.26 } },
           }}
         >
-          <label className="mb-1.5 block text-sm font-medium text-[#57534e] dark:text-[#c7d1df]">
-            Correo o usuario <span className="text-error-500">*</span>
+          <label htmlFor="login-email" className="mb-1.5 block text-sm font-medium text-[#57534e] dark:text-[#c7d1df]">
+            Correo o usuario <span aria-hidden="true" className="text-error-500">*</span>
           </label>
           <input
+            id="login-email"
+            name="email"
             value={loginValue}
-            onChange={(e: any) => setLoginValue(e.target.value)}
+            onChange={(e) => setLoginValue(e.target.value)}
             placeholder="correo@ejemplo.com"
             autoComplete="username"
             spellCheck={false}
+            aria-required="true"
             className="h-12 w-full rounded-2xl border border-[#e7ded0] bg-[#fffdfa] px-4 text-sm text-[#1c1917] placeholder:text-[#a8a29e] caret-[#1c1917] shadow-none outline-none transition-[border-color,box-shadow,transform] duration-200 focus:border-[#ff801f] focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:placeholder:text-[#8ea0b8] dark:caret-[#e5e7eb] dark:focus:border-[#fb923c] dark:focus:ring-[#fb923c]/25"
           />
         </motion.div>
@@ -115,33 +128,38 @@ export default function SignInForm() {
             visible: { opacity: 1, y: 0, transition: { duration: 0.26 } },
           }}
         >
-          <label className="mb-1.5 block text-sm font-medium text-[#57534e] dark:text-[#c7d1df]">
-            Contraseña <span className="text-error-500">*</span>
+          <label htmlFor="login-password" className="mb-1.5 block text-sm font-medium text-[#57534e] dark:text-[#c7d1df]">
+            Contraseña <span aria-hidden="true" className="text-error-500">*</span>
           </label>
           <div className="relative">
             <input
+              id="login-password"
+              name="password"
               value={password}
-              onChange={(e: any) => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               type={showPassword ? "text" : "password"}
               placeholder="Ingresa tu contraseña"
               autoComplete="current-password"
-            className="h-12 w-full rounded-2xl border border-[#e7ded0] bg-[#fffdfa] px-4 pr-11 text-sm text-[#1c1917] placeholder:text-[#a8a29e] caret-[#1c1917] shadow-none outline-none transition-[border-color,box-shadow,transform] duration-200 focus:border-[#ff801f] focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:placeholder:text-[#8ea0b8] dark:caret-[#e5e7eb] dark:focus:border-[#fb923c] dark:focus:ring-[#fb923c]/25"
+              aria-required="true"
+              className="h-12 w-full rounded-2xl border border-[#e7ded0] bg-[#fffdfa] px-4 pr-11 text-sm text-[#1c1917] placeholder:text-[#a8a29e] caret-[#1c1917] shadow-none outline-none transition-[border-color,box-shadow,transform] duration-200 focus:border-[#ff801f] focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:placeholder:text-[#8ea0b8] dark:caret-[#e5e7eb] dark:focus:border-[#fb923c] dark:focus:ring-[#fb923c]/25"
             />
-            <span
+            <button
+              type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 cursor-pointer"
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 cursor-pointer rounded p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff801f]"
             >
               {showPassword ? (
-                <EyeIcon className="size-5 fill-[#78716c] dark:fill-[#9aa9bd]" />
+                <EyeIcon className="size-5 fill-[#78716c] dark:fill-[#9aa9bd]" aria-hidden="true" />
               ) : (
-                <EyeCloseIcon className="size-5 fill-[#78716c] dark:fill-[#9aa9bd]" />
+                <EyeCloseIcon className="size-5 fill-[#78716c] dark:fill-[#9aa9bd]" aria-hidden="true" />
               )}
-            </span>
+            </button>
           </div>
         </motion.div>
 
         {message && (
-          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+          <p role="alert" aria-live="assertive" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
             {message}
           </p>
         )}

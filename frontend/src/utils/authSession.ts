@@ -12,6 +12,7 @@ const SESSION_KEYS = [
 
 // Security: Tokens are now stored in httpOnly cookies, not in localStorage
 // These functions only clear non-sensitive user data
+// XSS attacks cannot steal tokens from httpOnly cookies
 
 export function clearClientAuthSession(): void {
   for (const k of SESSION_KEYS) {
@@ -30,6 +31,13 @@ export function hasValidSessionToken(): boolean {
   // Cookies are automatically sent with requests
   // Backend will validate them
   return true;
+}
+
+// Security: Deprecated - token is no longer accessible from JavaScript
+// This function is kept for backwards compatibility but always returns null
+export function readAccessToken(): string | null {
+  console.warn('readAccessToken() is deprecated - tokens are now in httpOnly cookies for security');
+  return null;
 }
 
 function resolveRequestUrl(input: RequestInfo | URL): string {

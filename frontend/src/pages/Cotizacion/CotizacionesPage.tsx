@@ -58,7 +58,7 @@ export default function CotizacionesPage() {
     canCotizacionesDelete,
   } = useCotizacionPermissions(clearSessionAndGoToLogin);
 
-  const fetchCotizaciones = async () => {
+  const fetchCotizaciones = useCallback(async () => {
     if (!canCotizacionesView || !isAuthenticated) {
       setRows([]);
       return;
@@ -106,12 +106,11 @@ export default function CotizacionesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canCotizacionesView, isAuthenticated, clearSessionAndGoToLogin]);
 
   useEffect(() => {
     fetchCotizaciones();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canCotizacionesView]);
+  }, [fetchCotizaciones]);
 
   useEffect(() => {
     const onUpdated = () => {
@@ -121,8 +120,7 @@ export default function CotizacionesPage() {
 
     window.addEventListener("cotizaciones:updated", onUpdated as any);
     return () => window.removeEventListener("cotizaciones:updated", onUpdated as any);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canCotizacionesView]);
+  }, [canCotizacionesView, fetchCotizaciones]);
 
   const deleteCotizacion = async (id: string) => {
     if (!canCotizacionesDelete) {

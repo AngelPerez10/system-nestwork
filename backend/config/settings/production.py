@@ -25,13 +25,21 @@ CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_SAMESITE = "Lax"
 
-# JWT Cookie security (must be True in production)
-# Access tokens are set with secure=True in views.py
-# This ensures refresh tokens are also secure
+# JWT Cookie security - MUST be True in production
+# This ensures tokens are only sent over HTTPS
+AUTH_COOKIE_SECURE = True
 
+# Production: explicit max_age on cookies (aligns with SIMPLE_JWT); do not use session-only cookies here.
+AUTH_JWT_SESSION_COOKIES = env.bool("AUTH_JWT_SESSION_COOKIES", default=False)
+
+# Additional security headers (OWASP 2025)
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True)
 SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=True)
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"  # Security: Prevent popup attacks
+
+# CSP: Upgrade HTTP to HTTPS in production
+CSP_UPGRADE_INSECURE = True
 
 if not CORS_ALLOWED_ORIGINS:
     raise ValueError(

@@ -13,11 +13,12 @@ export default function RequireUsuariosView({ children }: RequireUsuariosViewPro
   const location = useLocation();
   const { isAuthenticated, isLoading, isAdmin, hasPermission } = useAuth();
 
-  // Show nothing while loading auth state
+  // Show loading spinner while checking auth state
+  // Security: AuthContext validates httpOnly cookies via /api/me/
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600" role="status" aria-label="Verificando permisos de usuarios"></div>
       </div>
     );
   }

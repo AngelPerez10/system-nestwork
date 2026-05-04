@@ -8,7 +8,7 @@ import Input from "@/components/form/input/InputField";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import Alert from "@/components/ui/alert/Alert";
 import { Modal } from "@/components/ui/modal";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { PencilIcon, TrashBinIcon } from "@/icons";
 import { useCotizacionDraftSave } from "@/hooks/cotizacion/useCotizacionDraftSave";
 import { CotizacionSaveStatus } from "@/components/cotizacion/CotizacionSaveStatus";
@@ -122,7 +122,8 @@ const inputFieldInsetClass =
 /** Etiquetas de formulario ligeramente más pequeñas en móvil */
 const labelPageClass = "!mb-1 !text-xs !font-medium sm:!mb-1.5 sm:!text-sm";
 
-const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+// Auth is handled by httpOnly cookies (credentials: 'include' in fetch interceptor)
+const getToken = () => "cookie";
 
 const toNumber = (v: unknown, fallback = 0) => {
   const n = Number(v);
@@ -304,8 +305,6 @@ export default function NuevaCotizacionPage() {
 
   const fetchClientes = async (search = "") => {
     if (!canCotizacionesView) return;
-    const token = getToken();
-    if (!token) return null;
     setLoadingClientes(true);
     try {
       const query = new URLSearchParams({
@@ -314,7 +313,7 @@ export default function NuevaCotizacionPage() {
       });
       const res = await fetch(apiUrl(`/api/clientes/?${query.toString()}`), {
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
       });
@@ -372,7 +371,7 @@ export default function NuevaCotizacionPage() {
   const filteredClientes = clientes;
 
   const hydrateFormFromCotizacionDetail = useCallback(
-    async (data: ApiCotizacion, token: string, opts: { updateIdxBadge: boolean }) => {
+    async (data: ApiCotizacion, opts: { updateIdxBadge: boolean }) => {
       if (opts.updateIdxBadge) {
         setEditingCotizacionIdx(Number.isFinite(Number(data.idx)) ? Number(data.idx) : null);
       }
@@ -413,7 +412,7 @@ export default function NuevaCotizacionPage() {
         try {
           const cr = await fetch(apiUrl(`/api/clientes/${cid}/`), {
             method: "GET",
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { ...getAuthHeaders() },
             cache: "no-store" as RequestCache,
           });
           const one = (await cr.json().catch(() => null)) as Cliente | null;
@@ -443,8 +442,6 @@ export default function NuevaCotizacionPage() {
 
   useEffect(() => {
     if (editingCotizacionId || activeCotizacionId || !canCotizacionesCreate) return;
-    const token = getToken();
-    if (!token) return;
 
     let cancelled = false;
     const createDraft = async () => {
@@ -452,7 +449,7 @@ export default function NuevaCotizacionPage() {
         const res = await fetch(apiUrl("/api/cotizaciones/"), {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...getAuthHeaders(),
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -507,17 +504,12 @@ export default function NuevaCotizacionPage() {
       return;
     }
     setHydratingFromStorage(true);
-    const token = getToken();
-    if (!token) {
-      setHydratingFromStorage(false);
-      return;
-    }
 
     const load = async () => {
       try {
         const res = await fetch(apiUrl(`/api/cotizaciones/${editingCotizacionId}/`), {
           method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
           cache: "no-store" as RequestCache,
         });
         const data = (await res.json().catch(() => null)) as ApiCotizacion | null;
@@ -533,7 +525,7 @@ export default function NuevaCotizacionPage() {
           return;
         }
 
-        await hydrateFormFromCotizacionDetail(data, token, { updateIdxBadge: true });
+        await hydrateFormFromCotizacionDetail(data, { updateIdxBadge: true });
       } catch {
         setAlert({
           show: true,
@@ -556,8 +548,6 @@ export default function NuevaCotizacionPage() {
 
   useEffect(() => {
     if (!cloneModalOpen || !canCotizacionesView) return;
-    const token = getToken();
-    if (!token) return;
     if (cloneSearchDebounced.length < 1) {
       setCloneRows([]);
       return;
@@ -569,7 +559,7 @@ export default function NuevaCotizacionPage() {
         const params = new URLSearchParams();
         params.set("search", cloneSearchDebounced);
         const res = await fetch(apiUrl(`/api/cotizaciones/?${params.toString()}`), {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
           cache: "no-store" as RequestCache,
         });
         const data = await res.json().catch(() => null);
@@ -601,14 +591,12 @@ export default function NuevaCotizacionPage() {
   }, [cloneModalOpen, cloneSearchDebounced, canCotizacionesView]);
 
   const handleClonePick = async (id: number) => {
-    const token = getToken();
-    if (!token) return;
     setClonePickingId(id);
     setHydratingFromStorage(true);
     try {
       const res = await fetch(apiUrl(`/api/cotizaciones/${id}/`), {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
         cache: "no-store" as RequestCache,
       });
       const data = (await res.json().catch(() => null)) as ApiCotizacion | null;
@@ -621,7 +609,7 @@ export default function NuevaCotizacionPage() {
         });
         return;
       }
-      await hydrateFormFromCotizacionDetail(data, token, { updateIdxBadge: false });
+      await hydrateFormFromCotizacionDetail(data, { updateIdxBadge: false });
       setCloneModalOpen(false);
       setCloneSearch("");
       setCloneSearchDebounced("");
@@ -690,19 +678,13 @@ export default function NuevaCotizacionPage() {
       setCatalogoConceptosError("");
       return;
     }
-    const token = getToken();
-    if (!token) {
-      setCatalogoConceptos([]);
-      setCatalogoConceptosError("");
-      return;
-    }
     const loadCatalogoConceptos = async () => {
       setLoadingCatalogoConceptos(true);
       setCatalogoConceptosError("");
       try {
         const res = await fetch(apiUrl("/api/conceptos/?ordering=folio"), {
           method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
           cache: "no-store" as RequestCache,
         });
         const data = await res.json().catch(() => ({ results: [] }));
@@ -769,12 +751,12 @@ export default function NuevaCotizacionPage() {
     return () => window.clearTimeout(t);
   }, [alert.show]);
 
-  const validateClienteContacto = () => {
+  const validateClienteContacto = useCallback(() => {
     const missing: string[] = [];
     if (!clienteId) missing.push("Cliente");
     if (!String(contactoNombre || "").trim()) missing.push("Contacto");
     return { ok: missing.length === 0, missing };
-  };
+  }, [clienteId, contactoNombre]);
 
   const resolveClienteNombre = () => {
     const fromList = String(selectedCliente?.nombre || "").trim();
@@ -875,8 +857,7 @@ export default function NuevaCotizacionPage() {
     const nameOk = String(conceptoNombre || "").trim() !== "";
     const priceOk = toNumber(precioLista, 0) >= 0;
     return v.ok && qtyOk && nameOk && priceOk;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clienteId, contactoNombre, cantidad, conceptoNombre, precioLista]);
+  }, [validateClienteContacto, cantidad, conceptoNombre, precioLista]);
 
   const clearConceptoForm = () => {
     setEditingConceptoId(null);
@@ -1119,7 +1100,7 @@ export default function NuevaCotizacionPage() {
       const res = await fetch(apiUrl("/api/cotizaciones/pdf-preview/"), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),

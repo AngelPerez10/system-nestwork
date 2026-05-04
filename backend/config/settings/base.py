@@ -87,6 +87,15 @@ DATABASES = {
     }
 }
 
+# Security: Reject default DB credentials in production
+_db_password = DATABASES["default"]["PASSWORD"]
+_default_db_passwords = {"erp", "password", "postgres", "admin", "root", "123456"}
+if _db_password in _default_db_passwords and not env.bool("DJANGO_DEBUG", default=False):
+    raise ImproperlyConfigured(
+        f"POSTGRES_PASSWORD must not be a known default ('{_db_password}'). "
+        "Generate a strong password and set it in your .env file."
+    )
+
 MIDDLEWARE = [
     "config.middleware.HostHeaderValidationMiddleware",  # Security: Validate Host BEFORE tenant resolution
     "django_tenants.middleware.main.TenantMainMiddleware",
@@ -145,12 +154,20 @@ if not ALLOWED_HOSTS:
         "In production use your real domain names."
     )
 
+# Fail-fast: wildcard hosts enable Host header injection
+if "*" in ALLOWED_HOSTS:
+    raise ImproperlyConfigured(
+        "ALLOWED_HOSTS must NOT contain '*' (wildcard). "
+        "This enables Host header injection attacks that bypass multi-tenant resolution. "
+        "Use explicit hostnames instead."
+    )
+
 # If no tenant matches Host, fall back to public (dev convenience; disable in production)
 SHOW_PUBLIC_IF_NO_TENANT_FOUND = False
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "api.modules.auth.authentication.CookieOrHeaderJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_THROTTLE_CLASSES": (
@@ -158,24 +175,25 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",
     ),
     "DEFAULT_THROTTLE_RATES": {
-        "anon": env("DRF_THROTTLE_ANON", default="100/hour"),
-        "user": env("DRF_THROTTLE_USER", default="1000/hour"),
-        "onboarding_register": env("DRF_THROTTLE_ONBOARDING_REGISTER", default="10/hour"),
-        "onboarding_set_password": env("DRF_THROTTLE_ONBOARDING_SET_PASSWORD", default="30/hour"),
-        "onboarding_lead": env("DRF_THROTTLE_ONBOARDING_LEAD", default="20/hour"),
-        "support_request": env("DRF_THROTTLE_SUPPORT_REQUEST", default="20/hour"),
-        "login": env("DRF_THROTTLE_LOGIN", default="20/hour"),
+        "anon": env("DRF_THROTTLE_ANON", default="60/hour"),  # Reduced from 100 for security
+        "user": env("DRF_THROTTLE_USER", default="500/hour"),  # Reduced from 1000 for security
+        "onboarding_register": env("DRF_THROTTLE_ONBOARDING_REGISTER", default="5/hour"),  # Reduced from 10
+        "onboarding_set_password": env("DRF_THROTTLE_ONBOARDING_SET_PASSWORD", default="10/hour"),  # Reduced from 30
+        "onboarding_lead": env("DRF_THROTTLE_ONBOARDING_LEAD", default="10/hour"),  # Reduced from 20
+        "support_request": env("DRF_THROTTLE_SUPPORT_REQUEST", default="10/hour"),  # Reduced from 20
+        "login": env("DRF_THROTTLE_LOGIN", default="5/hour"),  # Security: Reduced from 20 to prevent brute force
     },
 }
 
+# Cookie max_age (when not using session cookies) must match JWT exp — see auth views _attach_jwt_cookies.
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("JWT_ACCESS_MINUTES", default=20)),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_DAYS", default=7)),  # Extended for cookie
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("JWT_ACCESS_MINUTES", default=1440)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_DAYS", default=14)),
+    "ROTATE_REFRESH_TOKENS": True,  # Security: Rotate refresh tokens on use
+    "BLACKLIST_AFTER_ROTATION": True,  # Security: Blacklist used refresh tokens
     "UPDATE_LAST_LOGIN": True,
     "ALGORITHM": "HS256",
-    "SIGNING_KEY": SECRET_KEY,
+    "SIGNING_KEY": env.str("JWT_SIGNING_KEY", default=""),  # Separated from SECRET_KEY
     "VERIFYING_KEY": None,
     "AUDIENCE": None,
     "ISSUER": None,
@@ -191,7 +209,31 @@ SIMPLE_JWT = {
     "SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
     "SLIDING_TOKEN_LIFETIME": timedelta(minutes=5),
     "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(days=1),
+    # Cookie settings for httpOnly tokens (security enhancement)
+    "AUTH_COOKIE": "access_token",
+    "AUTH_COOKIE_REFRESH": "refresh_token",
+    "AUTH_COOKIE_SECURE": env.bool("AUTH_COOKIE_SECURE", default=False),  # True in production
+    "AUTH_COOKIE_HTTP_ONLY": True,  # Security: Prevent XSS token theft
+    "AUTH_COOKIE_PATH": "/",
+    "AUTH_COOKIE_SAMESITE": "Lax",  # Security: CSRF protection
 }
+
+# If True: access/refresh cookies omit max_age (browser session — cleared when user closes the browser).
+# JWT exp inside the token still applies while the tab stays open; set JWT_ACCESS_MINUTES accordingly.
+AUTH_JWT_SESSION_COOKIES = env.bool("AUTH_JWT_SESSION_COOKIES", default=False)
+
+# Validate JWT_SIGNING_KEY: separate from SECRET_KEY to limit blast radius.
+# If compromised, only JWT tokens are affected — Django sessions, CSRF, and
+# password reset tokens remain protected by SECRET_KEY.
+_jwt_key = SIMPLE_JWT["SIGNING_KEY"]
+if not _jwt_key:
+    import warnings
+    warnings.warn(
+        "JWT_SIGNING_KEY is not set. Falling back to DJANGO_SECRET_KEY. "
+        "Set a separate JWT_SIGNING_KEY in your .env file for proper secret isolation.",
+        stacklevel=2,
+    )
+    SIMPLE_JWT["SIGNING_KEY"] = SECRET_KEY
 
 # Security: Cookie settings for JWT tokens
 # These ensure httpOnly cookies work correctly in production
@@ -203,19 +245,22 @@ CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=False)
 CSP_REPORT_ONLY = env.bool("CSP_REPORT_ONLY", default=False)  # Set True for testing
 CSP_REPORT_URI = env.str("CSP_REPORT_URI", default="")  # Optional: CSP violation reports
 
-# CSP Default Policy (restrictive, adjust as needed)
+# CSP Default Policy (restrictive, adjust per environment)
 CSP_DEFAULT_SRC = ["'self'"]
-CSP_SCRIPT_SRC = ["'self'"]  # No inline scripts, no eval()
-CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]  # unsafe-inline needed for some CSS
-CSP_IMG_SRC = ["'self'", "data:", "https:"]  # Allow data: for base64 images
-CSP_FONT_SRC = ["'self'", "https:"]
-CSP_CONNECT_SRC = ["'self'"]
+CSP_SCRIPT_SRC = ["'self'"]  # No inline scripts, no eval - React bundles everything
+CSP_STYLE_SRC = ["'self'", "'unsafe-inline'"]  # Tailwind CSS requires unsafe-inline
+CSP_IMG_SRC = ["'self'", "data:", "https:", "blob:"]  # data: for base64, blob: for previews
+CSP_FONT_SRC = ["'self'", "data:"]  # data: for embedded fonts
+CSP_CONNECT_SRC = ["'self'"]  # API calls to same origin
 CSP_MEDIA_SRC = ["'self'"]
+CSP_OBJECT_SRC = ["'none'"]  # Block plugins (Flash, Java, etc.)
 CSP_FRAME_ANCESTORS = ["'none'"]  # Prevent clickjacking
 CSP_BASE_URI = ["'self'"]
 CSP_FORM_ACTION = ["'self'"]
 CSP_FRAME_SRC = ["'none'"]
 CSP_WORKER_SRC = ["'self'", "blob:"]
+CSP_NAVIGATE_TO = None  # Don't restrict navigation (links can go anywhere)
+CSP_UPGRADE_INSECURE = env.bool("CSP_UPGRADE_INSECURE", default=False)  # True in production
 
 # Security headers (tightened further in production settings)
 SECURE_CONTENT_TYPE_NOSNIFF = True

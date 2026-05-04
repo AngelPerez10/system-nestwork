@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import PageMeta from "@/components/common/PageMeta";
 import ComponentCard from "@/components/common/ComponentCard";
@@ -10,7 +10,7 @@ import { useDropzone } from "react-dropzone";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import DatePicker from "@/components/form/date-picker";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { PencilIcon, TrashBinIcon, TimeIcon } from "@/icons";
 import { MobileOrderList } from "./MobileOrderCard";
 import { ClienteFormModal } from "@/components/clientes/ClienteFormModal";
@@ -102,9 +102,8 @@ export default function OrdenesTecnico() {
 
   const levantamientoSnapshotRef = useRef<{ payload: any; dibujo_url: string; cerco_materiales?: any[] } | null>(null);
 
-  const getToken = () => {
-    return localStorage.getItem("token") || sessionStorage.getItem("token");
-  };
+  // Auth is handled by httpOnly cookies (credentials: 'include' in fetch interceptor)
+  const getToken = () => "cookie";
 
   const getPermissionsFromStorage = () => {
     try {
@@ -115,7 +114,7 @@ export default function OrdenesTecnico() {
     }
   };
 
-  const loadServiciosDisponibles = async () => {
+  const loadServiciosDisponibles = useCallback(async () => {
     const token = getToken();
     if (!token) {
       setServiciosDisponibles([]);
@@ -125,7 +124,7 @@ export default function OrdenesTecnico() {
     try {
       const res = await fetch(apiUrl('/api/servicios/?page=1&page_size=500&ordering=idx'), {
         method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
         cache: 'no-store' as RequestCache,
       });
       const data = await res.json().catch(() => null);
@@ -144,7 +143,7 @@ export default function OrdenesTecnico() {
     } catch {
       setServiciosDisponibles([]);
     }
-  };
+  }, []);
 
   const [permissions, setPermissions] = useState<any>(() => getPermissionsFromStorage());
   const [mySignatureUrl, setMySignatureUrl] = useState<string>('');
@@ -166,7 +165,7 @@ export default function OrdenesTecnico() {
       try {
         const res = await fetch(apiUrl('/api/me/permissions/'), {
           method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
           cache: 'no-store' as RequestCache,
         });
         const data = await res.json().catch(() => null);
@@ -188,8 +187,7 @@ export default function OrdenesTecnico() {
     if (now - ordenesTecnicoServiciosLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
     ordenesTecnicoServiciosLastLoadAt = now;
     loadServiciosDisponibles();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadServiciosDisponibles]);
 
   useEffect(() => {
     const token = getToken();
@@ -202,7 +200,7 @@ export default function OrdenesTecnico() {
       try {
         const res = await fetch(apiUrl('/api/me/signature/'), {
           method: 'GET',
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
           cache: 'no-store' as RequestCache,
         });
         const data = await res.json().catch(() => null);
@@ -349,7 +347,7 @@ export default function OrdenesTecnico() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ public_id: publicId }),
         });
@@ -360,7 +358,7 @@ export default function OrdenesTecnico() {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ fotos_urls: updated }),
         });
@@ -501,7 +499,7 @@ export default function OrdenesTecnico() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ data_url: compressed, folder: 'ordenes/fotos' }),
         });
@@ -735,7 +733,7 @@ export default function OrdenesTecnico() {
     try {
       const res = await fetch(apiUrl(`/api/users/accounts/${userId}/signature/`), {
         method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
         cache: 'no-store' as RequestCache,
       });
       const data = await res.json().catch(() => null);
@@ -834,14 +832,6 @@ export default function OrdenesTecnico() {
         setLoading(false);
         return;
       }
-      const token = getToken();
-      if (!token) {
-        console.warn("No hay token de autenticación");
-        setOrdenes([]);
-        setLoading(false);
-        return;
-      }
-
       const response = await fetch(apiUrl(`/api/ordenes/?_ts=${Date.now()}`), {
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -966,7 +956,7 @@ export default function OrdenesTecnico() {
       const response = await fetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -981,7 +971,7 @@ export default function OrdenesTecnico() {
           await fetch(apiUrl(`/api/ordenes/${savedOrden.id}/levantamiento/`), {
             method: 'PUT',
             headers: {
-              Authorization: `Bearer ${token}`,
+              ...getAuthHeaders(),
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -1049,7 +1039,7 @@ export default function OrdenesTecnico() {
                   const searchRes = await fetch(apiUrl(`/api/cotizaciones/?search=${searchParam}`), {
                     method: 'GET',
                     headers: {
-                      Authorization: `Bearer ${token}`,
+                      ...getAuthHeaders(),
                       'Content-Type': 'application/json',
                     },
                     cache: 'no-store' as RequestCache,
@@ -1073,7 +1063,7 @@ export default function OrdenesTecnico() {
                 const cotRes = await fetch(cotUrl, {
                   method: cotMethod,
                   headers: {
-                    Authorization: `Bearer ${token}`,
+                    ...getAuthHeaders(),
                     'Content-Type': 'application/json',
                   },
                   body: JSON.stringify(cotPayload),
@@ -1134,7 +1124,7 @@ export default function OrdenesTecnico() {
             await fetch(apiUrl(`/api/clientes/${cid}/`), {
               method: 'PATCH',
               headers: {
-                Authorization: `Bearer ${token}`,
+                ...getAuthHeaders(),
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify(updates),
@@ -1157,7 +1147,7 @@ export default function OrdenesTecnico() {
               await fetch(apiUrl(`/api/cliente-contactos/${contactoIdToUpdate}/`), {
                 method: 'PATCH',
                 headers: {
-                  Authorization: `Bearer ${token}`,
+                  ...getAuthHeaders(),
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(body),

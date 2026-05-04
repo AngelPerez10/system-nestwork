@@ -3,10 +3,10 @@ from rest_framework.throttling import UserRateThrottle
 
 class UserManagementRateThrottle(UserRateThrottle):
     """
-    Rate limiting específico para operaciones de gestión de usuarios.
-    Más restrictivo que el throttle general de usuario.
+    Rate limiting para /api/users/accounts/ (GET list y mutaciones).
+    El GET se usa en dashboards (p. ej. historial global); 30/hour provocaba 429 con Strict Mode + hot reload.
     """
-    rate = "30/hour"  # 30 operaciones por hora para crear/editar/eliminar usuarios
+    rate = "120/minute"
 
 
 class SuperadminRateThrottle(UserRateThrottle):

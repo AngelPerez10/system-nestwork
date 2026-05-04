@@ -61,6 +61,12 @@ def me_support(request):
             category=category,
             message=message,
         )
+    except (ConnectionError, TimeoutError) as exc:
+        logger.exception("Support request network error for user %s", request.user.id)
+        return Response(
+            {"detail": "No se pudo enviar el mensaje. Verifica tu conexión e intenta de nuevo."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
     except Exception as exc:
         logger.exception("Support request failed for user %s", request.user.id)
         return Response(
@@ -138,6 +144,9 @@ def me(request):
                     action="avatar_uploaded",
                     schema_name=tenant_schema_name(),
                 )
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Avatar upload decode error: {e} (user: {user.id})")
+                return Response({"detail": "Formato de avatar inválido"}, status=400)
             except Exception as e:
                 logger.error(f"Avatar upload error: {e}")
                 return Response({"detail": "Error al procesar el avatar"}, status=400)
@@ -440,6 +449,9 @@ def users_account_signature(request, user_id: int):
                 schema_name=tenant_schema_name(),
                 target_user_id=target.id,
             )
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Signature upload decode error: {e} (user: {target.id})")
+            return Response({"detail": "Formato de firma inválido"}, status=400)
         except Exception as e:
             logger.error(f"Signature upload error: {e}")
             return Response({"detail": "Error al procesar la firma"}, status=400)

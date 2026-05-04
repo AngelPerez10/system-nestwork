@@ -186,10 +186,13 @@ export default function MonthlyTarget() {
       return;
     }
 
-    const headers: Record<string, string> = {};
+    let ignore = false;
 
     const getJson = async (path: string) => {
-      const res = await fetch(apiUrl(path), { headers, cache: "no-store" as RequestCache });
+      const res = await fetch(apiUrl(path), {
+        credentials: "include",
+        cache: "no-store" as RequestCache,
+      });
       if (!res.ok) return null;
       return res.json().catch(() => null);
     };
@@ -521,16 +524,25 @@ export default function MonthlyTarget() {
           .sort((a, b) => (a.when < b.when ? 1 : -1))
           .slice(0, MAX_ITEMS);
 
-        setAllItems(merged);
+        if (!ignore) {
+          setAllItems(merged);
+        }
       } catch {
-        setError("No se pudo cargar el historial global.");
+        if (!ignore) {
+          setError("No se pudo cargar el historial global.");
+        }
       } finally {
-        setLoading(false);
+        if (!ignore) {
+          setLoading(false);
+        }
       }
     };
 
     void load();
-  }, []);
+    return () => {
+      ignore = true;
+    };
+  }, [isAuthenticated, isAdmin]);
 
   const filteredItems = useMemo(() => allItems, [allItems]);
 
