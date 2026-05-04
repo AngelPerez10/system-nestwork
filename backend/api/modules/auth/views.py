@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate, get_user_model
+from django.conf import settings
 from django.db import connection
 from django.http import JsonResponse
 from django_tenants.utils import schema_context
@@ -228,13 +229,17 @@ def login(request):
         "platform_role": profile.platform_role,
     })
     
+    # Development: Check if we're in DEBUG mode to set secure=False
+    from django.conf import settings
+    is_debug = getattr(settings, 'DEBUG', False)
+    
     # Access token cookie (short-lived)
     response.set_cookie(
         key='access_token',
         value=str(refresh.access_token),
         max_age=60 * 20,  # 20 minutes
         httponly=True,
-        secure=True,  # HTTPS only
+        secure=not is_debug,  # HTTPS only in production
         samesite='Lax',
         path='/',
     )
@@ -245,7 +250,7 @@ def login(request):
         value=str(refresh),
         max_age=60 * 60 * 24 * 7,  # 7 days
         httponly=True,
-        secure=True,  # HTTPS only
+        secure=not is_debug,  # HTTPS only in production
         samesite='Lax',
         path='/api/token/refresh/',  # Only send to refresh endpoint
     )

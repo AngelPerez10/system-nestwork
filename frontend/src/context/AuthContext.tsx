@@ -74,6 +74,7 @@ const getInitialAuthState = (): AuthState => {
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+let authBootstrapInFlight = false;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>(getInitialAuthState);
@@ -187,8 +188,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Check authentication status on mount and periodically
   // Security: Tokens are in httpOnly cookies, so we check with backend
   useEffect(() => {
+    let interval: number | null = null;
+
     const checkAuth = async () => {
+      if (authBootstrapInFlight) return;
       try {
+        authBootstrapInFlight = true;
+        const onSignInPage = window.location.pathname === '/signin';
+        const hasStoredSessionHint = Boolean(
+          getStoredItem(AUTH_STORAGE_KEYS.USERNAME) ||
+          getStoredItem(AUTH_STORAGE_KEYS.ROLE) ||
+          getStoredItem(AUTH_STORAGE_KEYS.IS_SUPERADMIN)
+        );
+        if (onSignInPage && !hasStoredSessionHint) {
+          setAuthState(prev => ({ ...prev, isLoading: false, isAuthenticated: false }));
+          return;
+        }
+
         // Try to get current user from backend (uses cookie auth)
         const response = await fetch(apiUrl('/api/me/'), {
           method: 'GET',
@@ -223,6 +239,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: userData.email,
             user: userData,
           }));
+
+          // Only poll when authenticated.
+          if (interval == null) {
+            interval = window.setInterval(checkAuth, 60000);
+          }
         } else {
           // Not authenticated
           setAuthState(prev => ({
@@ -236,18 +257,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             email: null,
             user: null,
           }));
+
+          if (interval != null) {
+            window.clearInterval(interval);
+            interval = null;
+          }
         }
       } catch (error) {
         console.error('Auth check failed:', error);
         setAuthState(prev => ({ ...prev, isLoading: false, isAuthenticated: false }));
+        if (interval != null) {
+          window.clearInterval(interval);
+          interval = null;
+        }
+      } finally {
+        authBootstrapInFlight = false;
       }
     };
 
     checkAuth();
-
-    // Check every minute to keep auth state fresh
-    const interval = setInterval(checkAuth, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      if (interval != null) window.clearInterval(interval);
+    };
   }, []);
 
   const value = useMemo<AuthContextType>(() => ({

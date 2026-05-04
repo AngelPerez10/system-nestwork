@@ -59,6 +59,10 @@ function shouldIgnore401ForPath(pathname: string): boolean {
   if (pathname.endsWith("/api/login/") || pathname === "/api/login") return true;
   // Allow 401 on logout (expected)
   if (pathname.endsWith("/api/logout/") || pathname === "/api/logout") return true;
+  // /api/me* can legitimately return 401 when session is missing/expired.
+  // Redirecting from here can cause reload loops on signin/bootstrap checks.
+  if (pathname === "/api/me" || pathname === "/api/me/") return true;
+  if (pathname.startsWith("/api/me/")) return true;
   return false;
 }
 
@@ -83,6 +87,7 @@ export function installApi401UnauthorizedHandler(): void {
 
     const pathname = pathnameOfRequest(input);
     if (shouldIgnore401ForPath(pathname)) return response;
+    if (window.location.pathname === "/signin") return response;
 
     if (!redirectScheduled) {
       redirectScheduled = true;

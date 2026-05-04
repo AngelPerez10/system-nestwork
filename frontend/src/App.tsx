@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import SignIn from "@/pages/AuthPages/SignIn";
 import NotFound from "@/pages/OtherPage/NotFound";
 import GestionUsuario from "@/pages/ContactosNegocio/Usuarios/GestionUsuario";
@@ -38,9 +38,8 @@ import SupportPage from "@/pages/Soporte/SupportPage";
 export default function App() {
   return (
     <>
-      <Router>
-        <ScrollToTop />
-        <Routes>
+      <ScrollToTop />
+      <Routes>
           {/* Public Pages */}
           <Route path="/" element={<HomePage />} />
           <Route path="/signin" element={<SignIn />} />
@@ -98,8 +97,7 @@ export default function App() {
 
           {/* Fallback Route */}
           <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Router>
+      </Routes>
     </>
   );
 }

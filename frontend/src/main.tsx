@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { BrowserRouter as Router } from "react-router-dom";
 import "./index.css";
 import "swiper/swiper-bundle.css";
 import "flatpickr/dist/flatpickr.css";
@@ -19,14 +20,16 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
       <ThemeProvider>
-        <AuthProvider>
-          <AlertProvider>
-            <AlertContainer />
-            <AppWrapper>
-              <App />
-            </AppWrapper>
-          </AlertProvider>
-        </AuthProvider>
+        <Router>
+          <AuthProvider>
+            <AlertProvider>
+              <AlertContainer />
+              <AppWrapper>
+                <App />
+              </AppWrapper>
+            </AlertProvider>
+          </AuthProvider>
+        </Router>
       </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,

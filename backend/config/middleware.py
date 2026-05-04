@@ -26,6 +26,7 @@ class HostHeaderValidationMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
         self.allowed_hosts = set(settings.ALLOWED_HOSTS)
+        self.allow_all_hosts = "*" in self.allowed_hosts
         
         # Add common variations
         for host in list(self.allowed_hosts):
@@ -36,6 +37,9 @@ class HostHeaderValidationMiddleware:
                 self.allowed_hosts.add(f"{host}:5173")
     
     def __call__(self, request):
+        if self.allow_all_hosts:
+            return self.get_response(request)
+
         host = request.get_host().lower()
         
         # Extract hostname without port
