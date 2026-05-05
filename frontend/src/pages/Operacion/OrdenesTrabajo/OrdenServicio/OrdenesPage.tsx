@@ -17,71 +17,23 @@ import { ClienteFormModal } from "@/components/clientes/ClienteFormModal";
 import { Cliente } from "@/types/cliente";
 import ActionSearchBar from "@/components/kokonutui/action-search-bar";
 import LevantamientoForm from "../OrdenLevantamiento/LevantamientoForm";
+import { Orden, Usuario } from "./ordenesTypes";
+import { useOrdenesBootstrap } from "./useOrdenesBootstrap";
+import { createOrden, deleteOrden, getOrdenById, listOrdenes, updateOrden } from "./ordenesApi";
+import { useOrdenesForm } from "./useOrdenesForm";
+import { OrdenFormModal } from "./OrdenFormModal";
 
 const cardShellClass =
   "overflow-hidden rounded-3xl border border-[#e7ded0] bg-[#fffdfa]/95 shadow-[0_30px_80px_-40px_rgba(28,25,23,0.28)] backdrop-blur-sm dark:border-[#273244] dark:bg-[#111827]/80 dark:shadow-[0_30px_80px_-45px_rgba(0,0,0,0.55)]";
 
 const searchInputClass =
   "min-h-[44px] w-full rounded-2xl border border-[#e2d9ca] bg-[#fffdf8] py-2 pl-10 pr-10 text-sm text-[#1c1917] outline-none transition-all placeholder:text-[#7c7a74] focus:border-[#ff801f]/60 focus:ring-4 focus:ring-[#ff801f]/12 dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:placeholder:text-[#8ea0b8] dark:focus:border-[#fb923c]/70 dark:focus:ring-[#fb923c]/20 sm:min-h-[46px] sm:pl-11";
-const sectionLabelClass =
-  "text-[11px] font-semibold uppercase tracking-[0.16em] text-[#78716c] dark:text-[#8ea0b8] sm:text-xs";
 const claudeHeroHeadingClass =
   "[font-family:Georgia,'Times_New_Roman',serif] text-[clamp(1.85rem,2.8vw,2.6rem)] font-medium leading-[1.2] tracking-[-0.01em] text-[#1c1917] dark:text-[#f8fafc]";
-const claudeSectionHeadingClass =
-  "[font-family:Georgia,'Times_New_Roman',serif] text-[clamp(1.4rem,2vw,2rem)] font-medium leading-[1.2] text-gray-900 dark:text-white";
 const claudeBodyClass = "text-base font-normal leading-[1.6] text-[#57534e] dark:text-[#b7c1d1]";
 const claudeSansStyle = { fontFamily: "Outfit, sans-serif" } as const;
 
-interface ServicioCatalogo {
-  id: number;
-  nombre: string;
-  descripcion?: string;
-  categoria?: string;
-  activo?: boolean;
-}
-
-interface Orden {
-  id: number;
-  idx: number;
-  folio?: string | null;
-  cliente_id: number | null;
-  cliente: string;
-  direccion: string;
-  telefono_cliente: string;
-  problematica: string;
-  servicios_realizados: string[];
-  status: 'pendiente' | 'resuelto';
-  comentario_tecnico: string;
-  fecha_inicio: string;
-  hora_inicio: string;
-  fecha_finalizacion: string;
-  hora_termino: string;
-  nombre_encargado: string;
-  nombre_cliente: string;
-  tecnico_asignado?: number | null;
-  quien_instalo?: number | null;
-  quien_entrego?: number | null;
-  firma_encargado_url: string;
-  firma_cliente_url: string;
-  fotos_urls: string[];
-  pdf_url?: string;
-  fecha_creacion: string;
-  tipo_orden?: 'servicio_tecnico' | 'levantamiento' | string;
-}
-
-interface Usuario {
-  id: number;
-  username?: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  is_staff?: boolean;
-  is_superuser?: boolean;
-}
-
-let ordenesPagePermissionsLastLoadAt = 0;
 let ordenesPageInitialDataLastLoadAt = 0;
-let ordenesPageSignatureLastLoadAt = 0;
 
 const getCurrentYearMonth = () => {
   const d = new Date();
@@ -99,28 +51,25 @@ export default function Ordenes() {
 
   const levantamientoSnapshotRef = useRef<{ payload: any; dibujo_url: string; cerco_materiales?: any[] } | null>(null);
 
-  const getPermissionsFromStorage = () => {
-    try {
-      const raw = localStorage.getItem('permissions') || sessionStorage.getItem('permissions');
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  };
-
-  const [permissions, setPermissions] = useState<any>(() => getPermissionsFromStorage());
-
-  const canOrdenesView = permissions?.ordenes?.view !== false;
-  const canOrdenesCreate = !!permissions?.ordenes?.create;
-  const canOrdenesEdit = !!permissions?.ordenes?.edit;
-  const canOrdenesDelete = !!permissions?.ordenes?.delete;
+  const {
+    permissions,
+    canOrdenesView,
+    canOrdenesCreate,
+    canOrdenesEdit,
+    canOrdenesDelete,
+    mySignatureUrl,
+    serviciosDisponibles,
+    setServiciosDisponibles,
+  } = useOrdenesBootstrap({
+    throttleKey: "ordenes-page",
+    loadServicios: true,
+  });
 
   // Auth is handled by httpOnly cookies (credentials: 'include' in fetch interceptor)
   const getToken = () => "cookie";
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [serviciosDisponibles, setServiciosDisponibles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showClienteModal, setShowClienteModal] = useState(false);
@@ -160,60 +109,6 @@ export default function Ordenes() {
         return 'Servicio';
     }
   }, [tipoOrden]);
-
-  useEffect(() => {
-    const sync = () => setPermissions(getPermissionsFromStorage());
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
-
-  useEffect(() => {
-    const now = Date.now();
-    if (now - ordenesPagePermissionsLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
-    ordenesPagePermissionsLastLoadAt = now;
-    const load = async () => {
-      try {
-        const res = await fetch(apiUrl('/api/me/permissions/'), {
-          method: 'GET',
-          headers: { ...getAuthHeaders() },
-          cache: 'no-store' as RequestCache,
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) return;
-        const p = JSON.stringify(data?.permissions || {});
-        localStorage.setItem('permissions', p);
-        sessionStorage.setItem('permissions', p);
-        setPermissions(data?.permissions || {});
-      } catch {
-        // ignore
-      }
-    };
-    load();
-  }, []);
-
-  const [mySignatureUrl, setMySignatureUrl] = useState<string>('');
-
-  useEffect(() => {
-    const now = Date.now();
-    if (now - ordenesPageSignatureLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
-    ordenesPageSignatureLastLoadAt = now;
-    const load = async () => {
-      try {
-        const res = await fetch(apiUrl('/api/me/signature/'), {
-          method: 'GET',
-          headers: { ...getAuthHeaders() },
-          cache: 'no-store' as RequestCache,
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) return;
-        const url = data?.url || '';
-        setMySignatureUrl(url);
-      } catch {
-        return;
-      }
-    };
-    load();
-  }, []);
 
   const formatYmdToDMY = (ymd: string | null | undefined) => {
     if (!ymd) return '-';
@@ -287,7 +182,6 @@ export default function Ordenes() {
     const now = Date.now();
     if (now - ordenesPageInitialDataLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
     ordenesPageInitialDataLastLoadAt = now;
-    loadServiciosDisponibles();
     fetchOrdenes();
     fetchUsuarios();
   }, []);
@@ -320,7 +214,6 @@ export default function Ordenes() {
 
     setDeletingPhoto(true);
     try {
-      const token = getToken();
       // Eliminar de Cloudinary
       if (publicId) {
         await fetch(apiUrl('/api/ordenes/delete-image/'), {
@@ -478,7 +371,6 @@ export default function Ordenes() {
         const compressed = await compressImage(file, 80, 1400, 1400);
 
         // Subir al backend (Cloudinary)
-        const token = getToken();
         const resp = await fetch(apiUrl('/api/ordenes/upload-image/'), {
           method: 'POST',
           headers: {
@@ -540,30 +432,8 @@ export default function Ordenes() {
     message: string;
   }>({ show: false, variant: "success", title: "", message: "" });
 
-  // Form state
-  const [formData, setFormData] = useState({
-    folio: "",
-    cliente_id: null as number | null,
-    contacto_id: null as number | null,
-    cliente: "",
-    direccion: "",
-    telefono_cliente: "",
-    nombre_cliente: "",
-    problematica: "",
-    servicios_realizados: [] as string[],
-    status: "pendiente" as 'pendiente' | 'resuelto',
-    comentario_tecnico: "",
-    fecha_inicio: new Date().toISOString().split('T')[0],
-    hora_inicio: "",
-    fecha_finalizacion: "",
-    hora_termino: "",
-    nombre_encargado: "",
-    tecnico_asignado: null as number | null,
-    quien_instalo: null as number | null,
-    quien_entrego: null as number | null,
-    firma_encargado_url: "",
-    firma_cliente_url: "",
-    fotos_urls: [] as string[]
+  const { formData, setFormData, resetForm } = useOrdenesForm({
+    defaultFirmaEncargadoUrl: mySignatureUrl || "",
   });
 
   // Estado para modal de mapa
@@ -801,32 +671,6 @@ export default function Ordenes() {
     }
   };
 
-  const loadServiciosDisponibles = async () => {
-    try {
-      const res = await fetch(apiUrl('/api/servicios/?page=1&page_size=500&ordering=idx'), {
-        method: 'GET',
-        headers: { ...getAuthHeaders() },
-        cache: 'no-store' as RequestCache,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setServiciosDisponibles([]);
-        return;
-      }
-
-      const results = Array.isArray((data as any)?.results) ? ((data as any).results as ServicioCatalogo[]) : [];
-      const names = results
-        .filter((s) => s && typeof s.nombre === 'string' && s.nombre.trim() && s.activo !== false)
-        .map((s) => s.nombre.trim());
-
-      const merged = Array.from(new Set(names));
-      setServiciosDisponibles(merged);
-      localStorage.setItem('servicios_disponibles', JSON.stringify(merged));
-    } catch {
-      setServiciosDisponibles([]);
-    }
-  };
-
   const fetchOrdenes = async () => {
     try {
       if (!canOrdenesView) {
@@ -834,17 +678,8 @@ export default function Ordenes() {
         setLoading(false);
         return;
       }
-      const response = await fetch(apiUrl(`/api/ordenes/?_ts=${Date.now()}`), {
-        headers: {
-          ...getAuthHeaders(),
-          "Content-Type": "application/json"
-        },
-        cache: "no-store" as RequestCache,
-      });
-
+      const { response, rows } = await listOrdenes();
       if (response.ok) {
-        const data = await response.json();
-        const rows = Array.isArray(data) ? data : Array.isArray((data as any)?.results) ? (data as any).results : [];
         console.debug("[OrdenesPage] fetchOrdenes idx:", rows.map((r: any) => Number(r?.idx || 0)).filter((n: number) => Number.isFinite(n)));
         setOrdenes(rows);
       } else if (response.status === 401) {
@@ -868,7 +703,6 @@ export default function Ordenes() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
-    const token = getToken();
 
     // Reglas: Cliente, Dirección, Teléfono, Servicios Realizados y Fecha de Inicio son requeridos
     const { ok, missing } = validateForm();
@@ -890,9 +724,8 @@ export default function Ordenes() {
     try {
       setIsSaving(true);
       const url = editingOrden
-        ? apiUrl(`/api/ordenes/${editingOrden.id}/`)
-        : apiUrl("/api/ordenes/");
-      const method = editingOrden ? "PUT" : "POST";
+        ? editingOrden.id
+        : null;
 
       // Construir payload, omitiendo tecnico_asignado si es null y contacto_id (solo uso interno)
       const payload: any = { ...formData };
@@ -924,17 +757,12 @@ export default function Ordenes() {
       // Asegurar arreglo para servicios_realizados
       if (!Array.isArray(payload.servicios_realizados)) payload.servicios_realizados = [];
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      const { response, data } = url
+        ? await updateOrden(url, payload)
+        : await createOrden(payload);
 
       if (response.ok) {
-        const savedOrden = await response.json();
+        const savedOrden = data as any;
         const cid = payload?.cliente_id;
 
         if (cid && (payload?.direccion || payload?.telefono_cliente)) {
@@ -1226,13 +1054,8 @@ export default function Ordenes() {
 
   const handleConfirmDelete = async () => {
     if (!ordenToDelete) return;
-
-    const token = getToken();
     try {
-      const response = await fetch(apiUrl(`/api/ordenes/${ordenToDelete.id}/`), {
-        method: "DELETE",
-        headers: { ...getAuthHeaders() }
-      });
+      const { response } = await deleteOrden(ordenToDelete.id);
 
       if (response.ok) {
         await fetchOrdenes();
@@ -1336,15 +1159,10 @@ export default function Ordenes() {
     const open = async () => {
       let orden: Orden | undefined = ordenes.find((o) => o.id === id);
       if (!orden) {
-        const token = getToken();
-        if (!token) return;
         try {
-          const res = await fetch(apiUrl(`/api/ordenes/${id}/`), {
-            headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-            cache: "no-store" as RequestCache,
-          });
-          if (res.ok) {
-            orden = (await res.json()) as Orden;
+          const { response, data } = await getOrdenById(id);
+          if (response.ok) {
+            orden = data as Orden;
           }
         } catch {
           /* ignore */
@@ -1367,30 +1185,7 @@ export default function Ordenes() {
     setShowModal(false);
     setActiveTab("cliente");
     setTipoOrden('servicio_tecnico');
-    setFormData({
-      folio: "",
-      cliente_id: null,
-      contacto_id: null,
-      cliente: "",
-      direccion: "",
-      telefono_cliente: "",
-      nombre_cliente: "",
-      problematica: "",
-      servicios_realizados: [],
-      status: "pendiente",
-      comentario_tecnico: "",
-      fecha_inicio: new Date().toISOString().split('T')[0],
-      hora_inicio: "",
-      fecha_finalizacion: "",
-      hora_termino: "",
-      nombre_encargado: "",
-      tecnico_asignado: null,
-      quien_instalo: null,
-      quien_entrego: null,
-      firma_encargado_url: mySignatureUrl || "",
-      firma_cliente_url: "",
-      fotos_urls: []
-    });
+    resetForm();
     setEditingOrden(null);
     // Limpiar estados de búsqueda de dropdowns
     setClienteSearch('');
@@ -1915,8 +1710,9 @@ export default function Ordenes() {
                 {filterOpen && (
                   <div className="absolute right-0 z-[110] mt-2 w-72 max-h-[min(80vh,24rem)] overflow-auto rounded-xl border border-[#e7ded0] bg-[#fffdfa] p-4 shadow-xl ring-1 ring-black/5 dark:border-[#334155] dark:bg-[#111a2b] dark:ring-white/10">
                     <div className="mb-4">
-                      <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Estado</label>
+                      <label htmlFor="ordenes-filter-estado" className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Estado</label>
                       <select
+                        id="ordenes-filter-estado"
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value as any)}
                         className="h-10 w-full rounded-lg border border-[#e2d9ca] bg-[#fffdfa] px-3 text-sm text-[#1c1917] outline-none focus:border-[#ff801f] focus:bg-white focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#0f172a] dark:text-gray-200 dark:focus:bg-[#0f172a]"
@@ -1928,7 +1724,7 @@ export default function Ordenes() {
                       </select>
                     </div>
                     <div className="mb-4">
-                      <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Servicios Realizados</label>
+                      <p className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Servicios Realizados</p>
                       <div className="grid grid-cols-1 gap-2">
                         {serviciosDisponibles.map((srv) => {
                           const checked = filterServicio.includes(srv);
@@ -1955,7 +1751,7 @@ export default function Ordenes() {
                       )}
                     </div>
                     <div className="mb-4">
-                      <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Fecha</label>
+                      <label htmlFor="filtro-fecha" className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Fecha</label>
                       <div className="relative w-full">
                         <DatePicker
                           id="filtro-fecha"
@@ -2286,39 +2082,16 @@ export default function Ordenes() {
         </Modal>
 
         {/* Modal Crear/Editar */}
-        <Modal
-          mobileBottomSheet
+        <OrdenFormModal
           isOpen={showModal}
           onClose={handleCloseModal}
-          closeOnBackdropClick={false}
           closeOnEscape={!confirmDelete.open}
-          className="w-[94vw] max-h-[92vh] max-w-4xl overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa] p-0 dark:border-[#273244] dark:bg-[#111a2b]"
+          sectionLabel="Operación · Órdenes"
+          title={`${editingOrden ? 'Editar' : 'Nueva'} Orden de ${tipoOrdenLabel}`}
+          subtitle="Captura y revisa los datos antes de guardar"
+          formRef={formScrollRef}
+          onSubmit={handleSubmit}
         >
-          <div>
-            {/* Header */}
-            <header className="relative shrink-0 border-b border-[#e7ded0] bg-[#fcfaf6] px-6 py-5 pr-14 dark:border-[#334155] dark:bg-[#111827] sm:pr-16">
-              <div className="pointer-events-none absolute left-0 top-0 h-0.5 w-full bg-[#ff801f]" aria-hidden />
-              <div className="flex items-start gap-3">
-                <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-[#ff801f] text-black shadow-sm">
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                <div className="min-w-0">
-                  <p className={sectionLabelClass}>Operación · Órdenes</p>
-                  <h3 className={`mt-1 ${claudeSectionHeadingClass}`}>
-                    {editingOrden ? 'Editar' : 'Nueva'} Orden de {tipoOrdenLabel}
-                  </h3>
-                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                    Captura y revisa los datos antes de guardar
-                  </p>
-                </div>
-              </div>
-            </header>
-
-            {/* Body */}
-
-            <form ref={formScrollRef} onSubmit={handleSubmit} className="custom-scrollbar max-h-[80vh] space-y-5 overflow-y-auto bg-[#fffdfa] p-4 dark:bg-[#111a2b] sm:p-5">
 
               {/* Modal Alert */}
               {modalAlert.show && (
@@ -2362,8 +2135,9 @@ export default function Ordenes() {
                       <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Tipo de Orden de Trabajo</h4>
                     </div>
                     <div className="rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-4 shadow-theme-xs dark:border-[#334155] dark:bg-[#0f172a]/80">
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Selecciona el tipo de orden</label>
+                      <label htmlFor="orden-tipo-orden" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Selecciona el tipo de orden</label>
                       <select
+                        id="orden-tipo-orden"
                         value={tipoOrden}
                         onChange={(e) => setTipoOrden(e.target.value as any)}
                         disabled={!!editingOrden || isReadOnly}
@@ -2392,8 +2166,9 @@ export default function Ordenes() {
                     <div className="space-y-4 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-4 shadow-theme-xs dark:border-[#334155] dark:bg-[#0f172a]/80">
                       {editingOrden && (
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Folio</label>
+                          <label htmlFor="orden-folio" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Folio</label>
                           <input
+                            id="orden-folio"
                             type="text"
                             value={(formData as any).folio || ''}
                             onChange={(e) => setFormData({ ...formData, folio: e.target.value })}
@@ -2471,8 +2246,9 @@ export default function Ordenes() {
                       {/* 2. Nombre del Cliente y Técnico Asignado */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Nombre del Cliente</label>
+                          <label htmlFor="orden-nombre-cliente" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Nombre del Cliente</label>
                           <input
+                            id="orden-nombre-cliente"
                             type="text"
                             value={formData.nombre_cliente}
                             onChange={(e) => setFormData({ ...formData, nombre_cliente: e.target.value })}
@@ -2613,9 +2389,10 @@ export default function Ordenes() {
                     <div className="space-y-4 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-4 shadow-theme-xs dark:border-[#334155] dark:bg-[#0f172a]/80">
                       {/* Teléfono - Solo números */}
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">Teléfono</label>
+                        <label htmlFor="orden-cliente-telefono" className="block text-xs font-medium text-gray-600 dark:text-gray-300">Teléfono</label>
                         <div className="flex items-center gap-2">
                           <input
+                            id="orden-cliente-telefono"
                             type="tel"
                             value={formData.telefono_cliente}
                             onChange={(e) => {
@@ -2650,7 +2427,7 @@ export default function Ordenes() {
                       {/* Dirección con botones */}
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">Dirección</label>
+                          <label htmlFor="orden-cliente-direccion" className="block text-xs font-medium text-gray-600 dark:text-gray-300">Dirección</label>
                           <button
                             type="button"
                             onClick={() => setShowMapModal(true)}
@@ -2664,6 +2441,7 @@ export default function Ordenes() {
                         </div>
                         <div className="relative">
                           <textarea
+                            id="orden-cliente-direccion"
                             value={formData.direccion}
                             onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
                             rows={2}
@@ -2735,8 +2513,9 @@ export default function Ordenes() {
                     <div className="space-y-4 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-4 shadow-theme-xs dark:border-[#334155] dark:bg-[#0f172a]/80">
                       {/* Problemática */}
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Problemática</label>
+                        <label htmlFor="orden-problematica" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Problemática</label>
                         <textarea
+                          id="orden-problematica"
                           value={formData.problematica}
                           onChange={(e) => setFormData({ ...formData, problematica: e.target.value })}
                           rows={3}
@@ -2817,8 +2596,9 @@ export default function Ordenes() {
 
                       {/* Comentario del Técnico */}
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Comentario del Técnico</label>
+                        <label htmlFor="orden-comentario-tecnico" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Comentario del Técnico</label>
                         <textarea
+                          id="orden-comentario-tecnico"
                           value={formData.comentario_tecnico}
                           onChange={(e) => setFormData({ ...formData, comentario_tecnico: e.target.value })}
                           rows={3}
@@ -2829,8 +2609,9 @@ export default function Ordenes() {
 
                       {/* Estado del Problema */}
                       <div>
-                        <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Estado del Problema</label>
+                        <label htmlFor="orden-estado-problema" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Estado del Problema</label>
                         <select
+                          id="orden-estado-problema"
                           value={formData.status}
                           onChange={(e) => setFormData({ ...formData, status: e.target.value as 'pendiente' | 'resuelto' })}
                           className="w-full h-10 rounded-lg border border-gray-300 dark:border-[#334155] bg-white dark:bg-[#0f172a] text-sm px-3 shadow-theme-xs text-gray-800 dark:text-gray-200 focus:border-[#ff801f] focus:ring-2 focus:ring-[#ff801f]/20 outline-none"
@@ -3141,11 +2922,7 @@ export default function Ordenes() {
                   </button>
                 )}
               </div>
-            </form>
-
-          </div>
-
-        </Modal>
+        </OrdenFormModal>
 
         {/* Modal Eliminar */}
         {ordenToDelete && (
@@ -3219,9 +2996,9 @@ export default function Ordenes() {
 
                 {/* Input manual de coordenadas */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+                  <p className="block text-xs font-medium text-gray-600 dark:text-gray-300">
                     O ingresa las coordenadas manualmente
-                  </label>
+                  </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <input

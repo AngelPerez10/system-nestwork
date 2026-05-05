@@ -3,7 +3,7 @@ import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import Button from "@/components/ui/button/Button";
 import Alert from "@/components/ui/alert/Alert";
-import { apiUrl, resolveMediaUrl } from "@/config/api";
+import { apiUrl, resolveMediaUrl, getAuthHeaders } from "@/config/api";
 import { Link } from "react-router-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -18,13 +18,9 @@ type MePayload = {
   avatar_url?: string;
 };
 
-const getToken = () =>
-  localStorage.getItem("token") || sessionStorage.getItem("token") || "";
-
 const authHeaders = (): HeadersInit => {
-  const t = getToken();
   const h: Record<string, string> = { "Content-Type": "application/json" };
-  if (t) h.Authorization = `Bearer ${t}`;
+  Object.assign(h, getAuthHeaders());
   return h;
 };
 

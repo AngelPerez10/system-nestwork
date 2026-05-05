@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import DrawingBoard from '@/components/ui/drawing/DrawingBoard';
 import Alert from '@/components/ui/alert/Alert';
-import { apiUrl } from '@/config/api';
+import { apiUrl, getAuthHeaders } from '@/config/api';
 import { formatMonthLabelEs } from '@/utils/statsMonthKey';
 import { useCurrentMonthKey } from '@/hooks/useStatsMonthKey';
 
@@ -32,7 +32,7 @@ type SyscomSearchParams = {
   agrupar?: "0" | "1";
 };
 
-const getAuthToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+const getAuthToken = () => "cookie-session";
 
 const buildProductosQuery = (params: SyscomSearchParams) => {
   const sp = new URLSearchParams();
@@ -193,7 +193,7 @@ type LevantamientoFormValue = {
   dibujo_url: string;
 };
 
-/** Modelos de producto cerco (catálogo Syscom). */
+/** Modelos de producto cerco (catÃ¡logo Syscom). */
 const CERCO_PRODUCT_MODELS = {
   KIT_METROS_75: 'SYSNGHS-KIT',
   KIT_METROS_500: 'SYSNGV2-KIT',
@@ -208,7 +208,7 @@ const CERCO_PRODUCT_MODELS = {
   SIRENA_15W_CON_GABINETE: 'IMP15NV2',
 } as const;
 
-/** Modelo de kit según metros de cerco: ≤75, 76–500, 501–800. */
+/** Modelo de kit segÃºn metros de cerco: â‰¤75, 76â€“500, 501â€“800. */
 function getModelForMetros(metros: number): string | null {
   if (!Number.isFinite(metros) || metros < 1) return null;
   if (metros <= 75) return CERCO_PRODUCT_MODELS.KIT_METROS_75;
@@ -223,7 +223,7 @@ type CercoMaterialItem = {
   producto: SyscomProducto;
 };
 
-/** Estado inicial de la sección cerco (evita duplicar en defaultValue y al cambiar tipo). */
+/** Estado inicial de la secciÃ³n cerco (evita duplicar en defaultValue y al cambiar tipo). */
 const cercoInitialState = {
   cerco_metros: '',
   cerco_metros_tramo_1: '',
@@ -336,7 +336,7 @@ type Props = {
   ordenId?: number | null;
   disabled?: boolean;
   onSnapshot?: (snapshot: LevantamientoSnapshot) => void;
-  /** Mes del resumen en el listado (solo lectura; órdenes nuevas desde esa vista). */
+  /** Mes del resumen en el listado (solo lectura; Ã³rdenes nuevas desde esa vista). */
   listadoMesEtiqueta?: string;
 };
 
@@ -380,7 +380,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
         if (tc && Number.isFinite(tc)) setTipoCambio(tc);
       })
       .catch(() => {
-        // si falla el tipo de cambio, simplemente no generamos materiales para cotización
+        // si falla el tipo de cambio, simplemente no generamos materiales para cotizaciÃ³n
       });
   }, []);
 
@@ -399,7 +399,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
         const res = await fetch(apiUrl(`/api/ordenes/${oid}/levantamiento/`), {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...getAuthHeaders(),
             'Content-Type': 'application/json',
           },
           cache: 'no-store' as RequestCache,
@@ -437,7 +437,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
         ? materialesCerco.map((item) => {
             const p = item.producto;
             const precios = p.precios || null;
-            // Syscom devuelve precios en USD → convertimos a MXN sin IVA (para que la cotización calcule el IVA 16%)
+            // Syscom devuelve precios en USD â†’ convertimos a MXN sin IVA (para que la cotizaciÃ³n calcule el IVA 16%)
             const usdLista = Number(precios?.precio_lista ?? 0) || 0;
             const precioLista = usdLista > 0 ? round2(usdLista * tipoCambio) : 0;
 
@@ -650,14 +650,14 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
           className={inputBaseClass}
         >
           <option value="">Seleccionar...</option>
-          <option value="camara">Cámara</option>
+          <option value="camara">CÃ¡mara</option>
           <option value="cerco">Cerco</option>
           <option value="alarmas">Alarmas</option>
         </select>
 
         {v.tipo === 'camara' && (
           <>
-            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-2 mt-6">Tipo de cámara</label>
+            <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-2 mt-6">Tipo de cÃ¡mara</label>
 
             <div className="rounded-xl border border-gray-200 dark:border-white/10 bg-white/80 dark:bg-gray-900/35 overflow-hidden">
               <div className="divide-y divide-gray-200 dark:divide-white/10">
@@ -737,7 +737,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
                         <div className={cameraRowClass}>
                           <div>
-                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Megapíxeles</div>
+                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">MegapÃ­xeles</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -752,7 +752,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Disminuir megapíxeles bala"
+                              aria-label="Disminuir megapÃ­xeles bala"
                             >
                               -
                             </button>
@@ -771,7 +771,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Aumentar megapíxeles bala"
+                              aria-label="Aumentar megapÃ­xeles bala"
                             >
                               +
                             </button>
@@ -884,7 +884,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
                         <div className={cameraRowClass}>
                           <div>
-                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Megapíxeles</div>
+                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">MegapÃ­xeles</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -899,7 +899,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Disminuir megapíxeles cubo"
+                              aria-label="Disminuir megapÃ­xeles cubo"
                             >
                               -
                             </button>
@@ -918,7 +918,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Aumentar megapíxeles cubo"
+                              aria-label="Aumentar megapÃ­xeles cubo"
                             >
                               +
                             </button>
@@ -1031,7 +1031,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
                         <div className={cameraRowClass}>
                           <div>
-                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Megapíxeles</div>
+                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">MegapÃ­xeles</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -1046,7 +1046,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Disminuir megapíxeles domo"
+                              aria-label="Disminuir megapÃ­xeles domo"
                             >
                               -
                             </button>
@@ -1065,7 +1065,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Aumentar megapíxeles domo"
+                              aria-label="Aumentar megapÃ­xeles domo"
                             >
                               +
                             </button>
@@ -1178,7 +1178,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
                         <div className={cameraRowClass}>
                           <div>
-                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Megapíxeles</div>
+                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">MegapÃ­xeles</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -1193,7 +1193,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Disminuir megapíxeles pinhole"
+                              aria-label="Disminuir megapÃ­xeles pinhole"
                             >
                               -
                             </button>
@@ -1212,7 +1212,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Aumentar megapíxeles pinhole"
+                              aria-label="Aumentar megapÃ­xeles pinhole"
                             >
                               +
                             </button>
@@ -1325,7 +1325,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
                         <div className={cameraRowClass}>
                           <div>
-                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Megapíxeles</div>
+                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">MegapÃ­xeles</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -1340,7 +1340,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Disminuir megapíxeles ptz"
+                              aria-label="Disminuir megapÃ­xeles ptz"
                             >
                               -
                             </button>
@@ -1359,7 +1359,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Aumentar megapíxeles ptz"
+                              aria-label="Aumentar megapÃ­xeles ptz"
                             >
                               +
                             </button>
@@ -1472,7 +1472,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
                         <div className={cameraRowClass}>
                           <div>
-                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Megapíxeles</div>
+                            <div className="text-xs font-medium text-gray-700 dark:text-gray-200">MegapÃ­xeles</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button
@@ -1487,7 +1487,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Disminuir megapíxeles turret"
+                              aria-label="Disminuir megapÃ­xeles turret"
                             >
                               -
                             </button>
@@ -1506,7 +1506,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                                 });
                               }}
                               className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                              aria-label="Aumentar megapíxeles turret"
+                              aria-label="Aumentar megapÃ­xeles turret"
                             >
                               +
                             </button>
@@ -1560,7 +1560,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
             <div className="flex flex-col md:flex-row gap-3">
               <div className="flex-1">
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Tecnología</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">TecnologÃ­a</label>
                 <select
                   value={v.camara_grabado_tecnologia}
                   onChange={(e) => {
@@ -1614,7 +1614,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                   className={inputBaseClass}
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="si">Sí</option>
+                  <option value="si">SÃ­</option>
                   <option value="no">No</option>
                 </select>
               </div>
@@ -1622,7 +1622,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
             {v.camara_grabado_compuertas === 'si' && (
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Cuántos conpuertos POE</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">CuÃ¡ntos conpuertos POE</label>
                 <input
                   type="number"
                   min={0}
@@ -1848,7 +1848,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
               <div className={cameraRowClass}>
                 <div>
-                  <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Categoría</div>
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-200">CategorÃ­a</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -1862,7 +1862,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                       });
                     }}
                     className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                    aria-label="Disminuir categoría de cable"
+                    aria-label="Disminuir categorÃ­a de cable"
                   >
                     -
                   </button>
@@ -1880,7 +1880,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                       });
                     }}
                     className="h-9 w-9 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
-                    aria-label="Aumentar categoría de cable"
+                    aria-label="Aumentar categorÃ­a de cable"
                   >
                     +
                   </button>
@@ -1916,7 +1916,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                         <div className="space-y-2">
                           <div className={cameraRowClass}>
                             <div>
-                              <div className="text-xs font-medium text-gray-700 dark:text-gray-200">¿Cuántas bobinas de cable?</div>
+                              <div className="text-xs font-medium text-gray-700 dark:text-gray-200">Â¿CuÃ¡ntas bobinas de cable?</div>
                             </div>
                             <div className="flex items-center gap-2">
                               <button
@@ -2021,7 +2021,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                   className={inputBaseClass}
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="si">Sí</option>
+                  <option value="si">SÃ­</option>
                   <option value="no">No</option>
                 </select>
               </div>
@@ -2052,7 +2052,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">¿A cuántas líneas?</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Â¿A cuÃ¡ntas lÃ­neas?</label>
                 <input
                   type="number"
                   min={0}
@@ -2076,7 +2076,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">¿A cuántas líneas?</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Â¿A cuÃ¡ntas lÃ­neas?</label>
                 <input
                   type="number"
                   min={0}
@@ -2156,7 +2156,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                   className={inputBaseClass}
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="si">Sí</option>
+                  <option value="si">SÃ­</option>
                   <option value="no">No</option>
                 </select>
               </div>
@@ -2164,7 +2164,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">¿Lleva sirena?</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Â¿Lleva sirena?</label>
                 <select
                   value={v.cerco_sirena}
                   onChange={(e) => setV((prev) => ({ ...prev, cerco_sirena: (e.target.value as any) || '', cerco_sirena_con_gabinete: '' }))}
@@ -2178,14 +2178,14 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
               </div>
               {(v.cerco_sirena === '30w' || v.cerco_sirena === '15w') && (
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">¿Con gabinete?</label>
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Â¿Con gabinete?</label>
                   <select
                     value={v.cerco_sirena_con_gabinete}
                     onChange={(e) => setV((prev) => ({ ...prev, cerco_sirena_con_gabinete: (e.target.value as any) || '' }))}
                     className={inputBaseClass}
                   >
                     <option value="">Seleccionar...</option>
-                    <option value="si">Sí</option>
+                    <option value="si">SÃ­</option>
                     <option value="no">No</option>
                   </select>
                 </div>
@@ -2194,14 +2194,14 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Kit tierra física</label>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Kit tierra fÃ­sica</label>
                 <select
                   value={v.cerco_kit_tierra_fisica}
                   onChange={(e) => setV((prev) => ({ ...prev, cerco_kit_tierra_fisica: (e.target.value as any) || '' }))}
                   className={inputBaseClass}
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="si">Sí</option>
+                  <option value="si">SÃ­</option>
                   <option value="no">No</option>
                 </select>
               </div>
@@ -2213,7 +2213,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
                   className={inputBaseClass}
                 >
                   <option value="">Seleccionar...</option>
-                  <option value="si">Sí</option>
+                  <option value="si">SÃ­</option>
                   <option value="no">No</option>
                 </select>
               </div>
@@ -2231,7 +2231,7 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
             </div>
           </div>
 
-          {/* Sección Materiales (productos según metros de cerco) */}
+          {/* SecciÃ³n Materiales (productos segÃºn metros de cerco) */}
           <div className="mt-6 rounded-xl border border-gray-200 dark:border-white/10 p-4 bg-white dark:bg-gray-900/40 shadow-theme-xs">
             <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
               <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2240,15 +2240,15 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
               <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Materiales</h4>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 mb-3">
-              Productos sugeridos según metros de cerco
+              Productos sugeridos segÃºn metros de cerco
             </p>
             {loadingMateriales ? (
               <div className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">Cargando productos...</div>
             ) : materialesCerco.length === 0 ? (
               <div className="py-4 text-center text-sm text-gray-500 dark:text-gray-400">
                 {cercoModelosToFetch.length === 0
-                  ? 'Ingresa metros de cerco, o elige Antiplantas (Sí), Marca SFIRE o Kit tierra física (Sí) para ver productos sugeridos.'
-                  : 'No se encontró alguno de los productos en el catálogo.'}
+                  ? 'Ingresa metros de cerco, o elige Antiplantas (SÃ­), Marca SFIRE o Kit tierra fÃ­sica (SÃ­) para ver productos sugeridos.'
+                  : 'No se encontrÃ³ alguno de los productos en el catÃ¡logo.'}
               </div>
             ) : (
               <ul className="space-y-3">
@@ -2310,3 +2310,4 @@ export default function LevantamientoForm({ ordenId, disabled, onSnapshot, lista
     </>
   );
 }
+

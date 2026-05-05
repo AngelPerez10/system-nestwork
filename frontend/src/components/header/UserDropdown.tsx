@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { DropdownItem } from "../ui/dropdown/DropdownItem";
 import { Dropdown } from "../ui/dropdown/Dropdown";
 import { useNavigate } from "react-router-dom";
-import { apiUrl, resolveMediaUrl } from "@/config/api";
+import { apiUrl, resolveMediaUrl, getAuthHeaders } from "@/config/api";
 import { clearClientAuthSession } from "@/utils/authSession";
 import { useAuth } from "@/context/AuthContext";
 
@@ -14,11 +14,6 @@ export default function UserDropdown() {
   const navigate = useNavigate();
   const { user, isAdmin } = useAuth();
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const token = useMemo(
-    () => localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token') || '',
-    []
-  );
 
   const syncMeFromStorage = () => {
     if (user) {
@@ -35,7 +30,7 @@ export default function UserDropdown() {
       try {
         const res = await fetch(apiUrl('/api/me/'), {
           method: 'GET',
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          headers: { ...getAuthHeaders() },
           cache: 'no-store' as RequestCache,
         });
         const data = await res.json().catch(() => null);
@@ -46,7 +41,7 @@ export default function UserDropdown() {
       }
     };
     load();
-  }, [token, user]);
+  }, [user]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from django.conf import settings
 from django.core.cache import cache
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -41,9 +42,20 @@ def _paginate(request, rows: list[dict]) -> dict:
     return {"count": len(rows), "results": rows[start:end]}
 
 
+def _reject_stub_surface():
+    if not getattr(settings, "ENABLE_OPS_STUBS", False):
+        return Response({"detail": "No encontrado"}, status=404)
+    if tenant_schema_name() == "public":
+        return Response({"detail": "No encontrado"}, status=404)
+    return None
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def ordenes_tecnico_opciones(request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     users = visible_users_queryset(requesting_user=request.user).order_by("id")[:200]
     rows = []
     for u in users:
@@ -62,6 +74,9 @@ def ordenes_tecnico_opciones(request):
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def ordenes_collection(request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("ordenes")
     if request.method == "GET":
         return Response(_paginate(request, rows))
@@ -77,6 +92,9 @@ def ordenes_collection(request):
 @api_view(["GET", "PATCH", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def ordenes_detail(request, orden_id: int):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("ordenes")
     row = next((r for r in rows if int(r.get("id", 0)) == orden_id), None)
     if not row:
@@ -97,12 +115,18 @@ def ordenes_detail(request, orden_id: int):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def ordenes_reportes_semanales(_request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     return Response({"results": []})
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def ordenes_upload_image(request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     data = request.data if isinstance(request.data, dict) else {}
     url = (data.get("data_url") or "").strip()
     return Response({"url": url, "public_id": ""}, status=201)
@@ -111,12 +135,18 @@ def ordenes_upload_image(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def ordenes_delete_image(_request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     return Response(status=204)
 
 
 @api_view(["PATCH", "PUT"])
 @permission_classes([IsAuthenticated])
 def ordenes_update_photos(request, orden_id: int):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("ordenes")
     row = next((r for r in rows if int(r.get("id", 0)) == orden_id), None)
     if not row:
@@ -131,6 +161,9 @@ def ordenes_update_photos(request, orden_id: int):
 @api_view(["GET", "PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 def ordenes_levantamiento(request, orden_id: int):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     key = f"ordenes_levantamiento:{orden_id}"
     if request.method == "GET":
         return Response(cache.get(_bucket_key(key), {}))
@@ -142,12 +175,18 @@ def ordenes_levantamiento(request, orden_id: int):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def ordenes_pdf(_request, orden_id: int):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     return Response({"url": f"/api/ordenes/{orden_id}/pdf/"})
 
 
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def servicios_collection(request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("servicios")
     if request.method == "GET":
         q = (request.query_params.get("search") or "").strip().lower()
@@ -165,6 +204,9 @@ def servicios_collection(request):
 @api_view(["GET", "PATCH", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def servicios_detail(request, servicio_id: int):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("servicios")
     row = next((r for r in rows if int(r.get("id", 0)) == servicio_id), None)
     if not row:
@@ -183,6 +225,9 @@ def servicios_detail(request, servicio_id: int):
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def conceptos_collection(request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("conceptos")
     if request.method == "GET":
         return Response(_paginate(request, rows))
@@ -197,6 +242,9 @@ def conceptos_collection(request):
 @api_view(["GET", "PATCH", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def conceptos_detail(request, concepto_id: int):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("conceptos")
     row = next((r for r in rows if int(r.get("id", 0)) == concepto_id), None)
     if not row:
@@ -215,6 +263,9 @@ def conceptos_detail(request, concepto_id: int):
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def cotizaciones_collection(request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("cotizaciones")
     if request.method == "GET":
         q = (request.query_params.get("search") or "").strip().lower()
@@ -240,6 +291,9 @@ def cotizaciones_collection(request):
 @api_view(["GET", "PATCH", "PUT", "DELETE"])
 @permission_classes([IsAuthenticated])
 def cotizaciones_detail(request, cotizacion_id: int):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     rows = _read_list("cotizaciones")
     row = next((r for r in rows if int(r.get("id", 0)) == cotizacion_id), None)
     if not row:
@@ -258,6 +312,9 @@ def cotizaciones_detail(request, cotizacion_id: int):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def cotizaciones_pdf_preview(request):
+    guard = _reject_stub_surface()
+    if guard:
+        return guard
     payload = request.data if isinstance(request.data, dict) else {}
     return Response({"ok": True, "preview": payload})
 

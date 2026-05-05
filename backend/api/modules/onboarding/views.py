@@ -19,6 +19,7 @@ from api.modules.onboarding.services import (
     create_custom_plan_lead,
     send_activation_email,
 )
+from api.modules.users.services import tenant_schema_name
 from organizations.models import PendingCompanyRegistration
 
 logger = logging.getLogger(__name__)
@@ -36,10 +37,19 @@ class OnboardingLeadThrottle(AnonRateThrottle):
     scope = "onboarding_lead"
 
 
+def _require_public_schema():
+    if tenant_schema_name() != "public":
+        return Response({"detail": "No encontrado"}, status=404)
+    return None
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @throttle_classes([OnboardingRegisterThrottle])
 def register_company(request):
+    schema_guard = _require_public_schema()
+    if schema_guard:
+        return schema_guard
     data = request.data or {}
     first_name = (data.get("first_name") or "").strip()
     last_name = (data.get("last_name") or "").strip()
@@ -100,6 +110,9 @@ def register_company(request):
 @permission_classes([AllowAny])
 @throttle_classes([OnboardingSetPasswordThrottle])
 def set_password(request):
+    schema_guard = _require_public_schema()
+    if schema_guard:
+        return schema_guard
     data = request.data or {}
     token = (data.get("token") or "").strip()
     password = data.get("password") or ""
@@ -129,6 +142,9 @@ def set_password(request):
 @permission_classes([AllowAny])
 @throttle_classes([OnboardingLeadThrottle])
 def custom_plan_lead(request):
+    schema_guard = _require_public_schema()
+    if schema_guard:
+        return schema_guard
     data = request.data or {}
     first_name = (data.get("first_name") or "").strip()
     last_name = (data.get("last_name") or "").strip()
@@ -169,6 +185,9 @@ def custom_plan_lead(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def starter_pricing(request):
+    schema_guard = _require_public_schema()
+    if schema_guard:
+        return schema_guard
     """Precio público del plan starter (base, IVA, total mensual)."""
     base = getattr(settings, "STARTER_PLAN_BASE_MXN", None)
     rate = getattr(settings, "STARTER_PLAN_IVA_RATE", None)
@@ -187,6 +206,9 @@ def starter_pricing(request):
 @permission_classes([AllowAny])
 @throttle_classes([OnboardingRegisterThrottle])
 def create_checkout_preference(request):
+    schema_guard = _require_public_schema()
+    if schema_guard:
+        return schema_guard
     """
     Crea registro pendiente + preapproval Mercado Pago; el cliente debe abrir init_point.
     """
@@ -254,6 +276,9 @@ def create_checkout_preference(request):
 @api_view(["POST", "GET"])
 @permission_classes([AllowAny])
 def mercadopago_webhook(request):
+    schema_guard = _require_public_schema()
+    if schema_guard:
+        return schema_guard
     """
     Notificaciones IPN / webhook de Mercado Pago (preapproval / payment).
     Responde 200 para evitar reintentos excesivos cuando el caso ya está cubierto.

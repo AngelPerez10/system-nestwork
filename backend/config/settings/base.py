@@ -37,9 +37,6 @@ CORS_ALLOW_CREDENTIALS = True
 SHARED_APPS = [
     "django_tenants",
     "organizations",
-    "workspace",
-    "MiEscritorio.tareas",
-    "api",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -53,6 +50,9 @@ SHARED_APPS = [
 ]
 
 TENANT_APPS = [
+    "api",
+    "workspace",
+    "MiEscritorio.tareas",
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "django.contrib.sessions",
@@ -63,8 +63,6 @@ TENANT_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
-    "workspace",
-    "MiEscritorio.tareas",
     "ContactoNegocio",
 ]
 
@@ -164,6 +162,10 @@ if "*" in ALLOWED_HOSTS:
 
 # If no tenant matches Host, fall back to public (dev convenience; disable in production)
 SHOW_PUBLIC_IF_NO_TENANT_FOUND = False
+
+# Development stubs for ops endpoints must stay disabled unless explicitly enabled.
+# This avoids exposing non-domain/test surfaces in production by mistake.
+ENABLE_OPS_STUBS = env.bool("ENABLE_OPS_STUBS", default=env.bool("DJANGO_DEBUG", default=False))
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (

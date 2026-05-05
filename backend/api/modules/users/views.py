@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.db import transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -27,6 +27,31 @@ from organizations.models import Organization, OrganizationUser
 from workspace.models import UserProfile
 
 User = get_user_model()
+
+
+def _reject_public_schema():
+    if tenant_schema_name() == "public":
+        return Response({"detail": "No encontrado"}, status=404)
+    return None
+
+
+def _sync_user_pk_sequence():
+    """
+    Re-sync auth_user PK sequence with current max(id) to avoid
+    duplicate key errors when sequence gets out of sync.
+    """
+    table = User._meta.db_table
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"""
+            SELECT setval(
+                pg_get_serial_sequence(%s, 'id'),
+                COALESCE((SELECT MAX(id) FROM {table}), 1),
+                true
+            )
+            """,
+            [table],
+        )
 
 
 @api_view(["POST"])
@@ -185,6 +210,10 @@ def me_signature(request):
 @permission_classes([IsAuthenticated])
 @throttle_classes([UserManagementRateThrottle])
 def users_accounts(request):
+    public_guard = _reject_public_schema()
+    if public_guard:
+        return public_guard
+
     if request.method == "GET":
         memberships_by_user = {}
         if is_platform_superadmin(request.user):
@@ -247,25 +276,50 @@ def users_accounts(request):
                 )
 
     # ATOMIC TRANSACTION: Ensure all-or-nothing user creation
-    with transaction.atomic():
-        user = User.objects.create_user(
-            username=username,
-            email=(data.get("email") or "").strip()[:254],
-            password=password,
-            first_name=(data.get("first_name") or "")[:150],
-            last_name=(data.get("last_name") or "")[:150],
-            is_staff=bool(data.get("is_staff")),
-            is_superuser=False,
-            is_active=True,
-        )
-        if schema != "public":
-            org = Organization.objects.filter(schema_name=schema).first()
-            if org:
-                OrganizationUser.objects.get_or_create(organization=org, user=user)
+    try:
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=username,
+                email=(data.get("email") or "").strip()[:254],
+                password=password,
+                first_name=(data.get("first_name") or "")[:150],
+                last_name=(data.get("last_name") or "")[:150],
+                is_staff=bool(data.get("is_staff")),
+                is_superuser=False,
+                is_active=True,
+            )
+            if schema != "public":
+                org = Organization.objects.filter(schema_name=schema).first()
+                if org:
+                    OrganizationUser.objects.get_or_create(organization=org, user=user)
 
-        profile = get_or_create_profile(user)
-        profile.permissions = default_permissions_for_user(user)
-        profile.save(update_fields=["permissions"])
+            profile = get_or_create_profile(user)
+            profile.permissions = default_permissions_for_user(user)
+            profile.save(update_fields=["permissions"])
+    except IntegrityError as e:
+        # Common on PostgreSQL when sequence is desynchronized.
+        if "auth_user_pkey" not in str(e):
+            raise
+        _sync_user_pk_sequence()
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=username,
+                email=(data.get("email") or "").strip()[:254],
+                password=password,
+                first_name=(data.get("first_name") or "")[:150],
+                last_name=(data.get("last_name") or "")[:150],
+                is_staff=bool(data.get("is_staff")),
+                is_superuser=False,
+                is_active=True,
+            )
+            if schema != "public":
+                org = Organization.objects.filter(schema_name=schema).first()
+                if org:
+                    OrganizationUser.objects.get_or_create(organization=org, user=user)
+
+            profile = get_or_create_profile(user)
+            profile.permissions = default_permissions_for_user(user)
+            profile.save(update_fields=["permissions"])
     
     audit_security_event(
         actor=request.user,
@@ -280,6 +334,10 @@ def users_accounts(request):
 @permission_classes([IsAuthenticated])
 @throttle_classes([UserManagementRateThrottle])
 def users_account_detail(request, user_id: int):
+    public_guard = _reject_public_schema()
+    if public_guard:
+        return public_guard
+
     if not staff_required(request.user):
         return Response({"detail": "No autorizado"}, status=403)
 
@@ -346,6 +404,10 @@ def users_account_detail(request, user_id: int):
 @permission_classes([IsAuthenticated])
 @throttle_classes([UserManagementRateThrottle])
 def users_account_permissions(request, user_id: int):
+    public_guard = _reject_public_schema()
+    if public_guard:
+        return public_guard
+
     if not staff_required(request.user):
         return Response({"detail": "No autorizado"}, status=403)
 
@@ -380,6 +442,10 @@ def users_account_permissions(request, user_id: int):
 @api_view(["GET", "PUT"])
 @permission_classes([IsAuthenticated])
 def users_account_signature(request, user_id: int):
+    public_guard = _reject_public_schema()
+    if public_guard:
+        return public_guard
+
     if not staff_required(request.user):
         return Response({"detail": "No autorizado"}, status=403)
 

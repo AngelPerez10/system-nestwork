@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PageMeta from "@/components/common/PageMeta";
 import Alert from "@/components/ui/alert/Alert";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 const cardShellClass =
   "overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-[#d6ebfd]/20 dark:bg-[#000000] dark:shadow-none";
@@ -51,7 +51,7 @@ export default function OrdenPdfPage() {
   const [ordenIdx, setOrdenIdx] = useState<number | null>(null);
 
   const getToken = () => {
-    return localStorage.getItem("token") || sessionStorage.getItem("token");
+    return "cookie-session";
   };
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export default function OrdenPdfPage() {
     }
 
     fetch(apiUrl(`/api/ordenes/${id}/`), {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       cache: "no-store" as RequestCache,
     })
       .then(async (res) => {
@@ -96,8 +96,8 @@ export default function OrdenPdfPage() {
           setAlert({
             show: true,
             variant: "warning",
-            title: "Sin sesión",
-            message: "Inicia sesión para ver el PDF de la orden.",
+            title: "Sin sesiÃ³n",
+            message: "Inicia sesiÃ³n para ver el PDF de la orden.",
           });
           setLoading(false);
         }
@@ -106,7 +106,7 @@ export default function OrdenPdfPage() {
 
       if (!ordenId) {
         if (isMounted) {
-          setAlert({ show: true, variant: "error", title: "Error", message: "No se encontró el ID de la orden." });
+          setAlert({ show: true, variant: "error", title: "Error", message: "No se encontrÃ³ el ID de la orden." });
           setLoading(false);
         }
         return;
@@ -117,7 +117,7 @@ export default function OrdenPdfPage() {
 
         const resp = await fetch(apiUrl(`/api/ordenes/${ordenId}/pdf/`), {
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...getAuthHeaders(),
           },
         });
 
@@ -160,7 +160,7 @@ export default function OrdenPdfPage() {
         setPdfObjectUrl(url);
       } catch {
         if (isMounted) {
-          setAlert({ show: true, variant: "error", title: "Error", message: "No se pudo cargar la información." });
+          setAlert({ show: true, variant: "error", title: "Error", message: "No se pudo cargar la informaciÃ³n." });
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -231,7 +231,7 @@ export default function OrdenPdfPage() {
                     style={{ width: `${Math.min(100, Math.max(0, loadingProgress))}%` }}
                   />
                 </div>
-                <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-500">Preparando archivo…</p>
+                <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-500">Preparando archivoâ€¦</p>
               </div>
             </div>
           </div>
@@ -254,7 +254,7 @@ export default function OrdenPdfPage() {
             to="/ordenes"
             className="rounded-md px-1 py-0.5 transition-colors hover:bg-gray-200/60 hover:text-gray-800 dark:hover:bg-white/5 dark:hover:text-gray-200"
           >
-            Órdenes de servicio
+            Ã“rdenes de servicio
           </Link>
           <span className="text-gray-300 dark:text-gray-600" aria-hidden>
             /
@@ -285,7 +285,7 @@ export default function OrdenPdfPage() {
                 )}
               </div>
               <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-gray-600 dark:text-gray-400 sm:mt-2 sm:text-sm">
-                Revise el PDF en el panel principal; el lateral permite abrir en otra pestaña o descargar. El documento puede incluir fotos y firmas.
+                Revise el PDF en el panel principal; el lateral permite abrir en otra pestaÃ±a o descargar. El documento puede incluir fotos y firmas.
               </p>
             </div>
           </div>
@@ -294,7 +294,7 @@ export default function OrdenPdfPage() {
               type="button"
               onClick={() => navigate("/ordenes")}
               className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-gray-200/90 bg-white px-4 py-2.5 text-xs font-semibold text-gray-800 transition-colors hover:border-gray-300 hover:bg-gray-50 active:scale-[0.99] dark:border-[#d6ebfd]/20 dark:bg-[#000000] dark:text-gray-100 dark:hover:bg-white/[0.04] sm:w-auto sm:min-h-0"
-              aria-label="Regresar al listado de órdenes"
+              aria-label="Regresar al listado de Ã³rdenes"
             >
               <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M10 19 3 12l7-7" />
@@ -326,7 +326,7 @@ export default function OrdenPdfPage() {
                     aria-busy="true"
                     aria-label="Cargando documento"
                   >
-                    <p className="text-sm text-gray-500 dark:text-gray-500">Preparando vista previa…</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-500">Preparando vista previaâ€¦</p>
                   </div>
                 ) : pdfObjectUrl ? (
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-[inset_0_1px_0_0_rgba(0,0,0,0.04)] dark:border-[#d6ebfd]/20 dark:bg-[#000000] dark:shadow-none">
@@ -350,7 +350,7 @@ export default function OrdenPdfPage() {
                       to="/ordenes"
                       className="mt-6 text-sm font-medium text-[#ff801f] underline-offset-4 hover:underline dark:text-[#ffa057]"
                     >
-                      Ir a órdenes de servicio
+                      Ir a Ã³rdenes de servicio
                     </Link>
                   </div>
                 )}
@@ -363,7 +363,7 @@ export default function OrdenPdfPage() {
               <div className="border-b border-gray-100 px-4 py-4 dark:border-[#d6ebfd]/20 sm:px-5">
                 <p className={sectionLabelClass}>Documento</p>
                 <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-white">Archivo y acciones</h2>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">Nombre sugerido al descargar y accesos rápidos.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">Nombre sugerido al descargar y accesos rÃ¡pidos.</p>
               </div>
               <div className="space-y-4 px-4 py-5 sm:px-5">
                 <div className="rounded-xl border border-gray-200/80 bg-gray-50/60 px-3 py-2.5 dark:border-[#d6ebfd]/20 dark:bg-[#000000]">
@@ -385,7 +385,7 @@ export default function OrdenPdfPage() {
                     }}
                   >
                     {externalLinkIcon}
-                    <span className="hidden sm:inline">Abrir en nueva pestaña</span>
+                    <span className="hidden sm:inline">Abrir en nueva pestaÃ±a</span>
                     <span className="sm:hidden">Abrir</span>
                   </a>
 
@@ -411,7 +411,7 @@ export default function OrdenPdfPage() {
                 </div>
 
                 <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                  Si la vista previa se ve cortada o es pesada (fotos), abra el archivo en una pestaña nueva o descárguelo.
+                  Si la vista previa se ve cortada o es pesada (fotos), abra el archivo en una pestaÃ±a nueva o descÃ¡rguelo.
                 </p>
               </div>
             </div>
@@ -421,3 +421,5 @@ export default function OrdenPdfPage() {
     </div>
   );
 }
+
+

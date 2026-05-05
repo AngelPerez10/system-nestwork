@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useReducedMotion, motion, AnimatePresence } from "motion/react";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 export type SupportCategory = "bug" | "plan";
 
@@ -13,9 +13,6 @@ type Props = {
   contactHintEmail?: string;
   className?: string;
 };
-
-const getToken = () =>
-  localStorage.getItem("token") || sessionStorage.getItem("token") || "";
 
 function loadDraft(): { category: SupportCategory; subject: string; message: string } | null {
   try {
@@ -106,11 +103,6 @@ export function SupportRequestForm({ contactHintEmail = "", className = "" }: Pr
   async function handleSupportSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessageTouched(true);
-    const token = getToken();
-    if (!token) {
-      setSupportBanner({ type: "err", text: "No hay sesión activa. Vuelve a iniciar sesión." });
-      return;
-    }
     if (trimmedMessage.length < MESSAGE_MIN) {
       setSupportBanner({
         type: "err",
@@ -132,7 +124,7 @@ export function SupportRequestForm({ contactHintEmail = "", className = "" }: Pr
       const res = await fetch(apiUrl("/api/me/support/"), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

@@ -9,16 +9,25 @@ AUTH_JWT_SESSION_COOKIES = env.bool("AUTH_JWT_SESSION_COOKIES", default=True)
 # Set DJANGO_SECRET_KEY in your .env file (even for development)
 # python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'
 
-# django-tenants: local dev often hits localhost without a tenant domain match
-SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
+# Strict tenant isolation (also in development):
+# if host/domain does not match a tenant, return 404 instead of falling back
+# to public schema. This avoids accidental data operations in public schema.
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = False
 
-if not CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS = [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ]
+# Stubs allowed by default in local development.
+ENABLE_OPS_STUBS = env.bool("ENABLE_OPS_STUBS", default=True)
+
+# Keep explicit local origins always allowed, even when CORS_ALLOWED_ORIGINS
+# is provided in .env with a partial list.
+_dev_default_origins = {
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://nestwork.localtest.me:5173",
+    "http://nestwork.localtest.me:8000",
+}
+CORS_ALLOWED_ORIGINS = sorted(set(CORS_ALLOWED_ORIGINS or []).union(_dev_default_origins))
 
 # Permite frontend/backend en IP local (ej. 192.168.x.x:5173 -> 192.168.x.x:8000).
 CORS_ALLOWED_ORIGIN_REGEXES = [
@@ -27,6 +36,18 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://10\.\d{1,3}\.\d{1,3}\.\d{1,3}:(5173|4173|8000)$",
     r"^http://172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}:(5173|4173|8000)$",
 ]
+
+# Avoid CSRF origin mismatches on cookie-auth POST requests in local dev.
+CSRF_TRUSTED_ORIGINS = sorted(
+    set(globals().get("CSRF_TRUSTED_ORIGINS", [])).union(
+        {
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://nestwork.localtest.me:5173",
+            "http://netswork.localtest.me:5173",
+        }
+    )
+)
 
 # Development ALLOWED_HOSTS: explicit list, never wildcard.
 # Wildcard ("*") enables Host header injection that bypasses multi-tenant resolution.

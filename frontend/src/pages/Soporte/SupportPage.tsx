@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
 import PageMeta from "@/components/common/PageMeta";
 import { SupportRequestForm } from "@/components/support/SupportRequestForm";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 function readStoredUserEmail(): string {
   try {
@@ -43,11 +43,6 @@ function SideCard({
 export default function SupportPage() {
   const reduceMotion = useReducedMotion();
   const [emailHint, setEmailHint] = useState(readStoredUserEmail);
-  const token = useMemo(
-    () => localStorage.getItem("token") || sessionStorage.getItem("token") || "",
-    []
-  );
-
   useEffect(() => {
     const sync = () => setEmailHint(readStoredUserEmail());
     window.addEventListener("user:updated", sync);
@@ -55,13 +50,12 @@ export default function SupportPage() {
   }, []);
 
   useEffect(() => {
-    if (!token) return;
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch(apiUrl("/api/me/"), {
           method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
           cache: "no-store" as RequestCache,
         });
         const data = (await res.json().catch(() => null)) as { email?: string } | null;
@@ -75,7 +69,7 @@ export default function SupportPage() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, []);
 
   const mainCardClass =
     "overflow-hidden rounded-3xl border border-[#e7ded0] bg-[#fffdfa]/95 shadow-[0_30px_80px_-40px_rgba(28,25,23,0.22)] backdrop-blur-sm dark:border-[#273244] dark:bg-[#111827]/85 dark:shadow-[0_30px_80px_-45px_rgba(0,0,0,0.55)]";

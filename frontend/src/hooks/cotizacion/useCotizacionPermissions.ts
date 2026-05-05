@@ -26,7 +26,14 @@ export function useCotizacionPermissions(redirectOn401?: () => void) {
   }, [authPermissions]);
 
   useEffect(() => {
-    const sync = () => setPermissions(authPermissions || {});
+    const sync = () => {
+      try {
+        const raw = localStorage.getItem("permissions") || sessionStorage.getItem("permissions");
+        setPermissions(raw ? JSON.parse(raw) : authPermissions || {});
+      } catch {
+        setPermissions(authPermissions || {});
+      }
+    };
     window.addEventListener("permissions:updated" as any, sync);
     return () => {
       window.removeEventListener("permissions:updated" as any, sync);
@@ -34,7 +41,6 @@ export function useCotizacionPermissions(redirectOn401?: () => void) {
   }, [authPermissions]);
 
   useEffect(() => {
-    if (isAdmin) return;
     const load = async () => {
       try {
         const res = await fetch(apiUrl("/api/me/permissions/"), {
@@ -48,6 +54,13 @@ export function useCotizacionPermissions(redirectOn401?: () => void) {
         const data = await res.json().catch(() => null);
         if (!res.ok) return;
         const p = data?.permissions || {};
+        try {
+          const pStr = JSON.stringify(p);
+          localStorage.setItem("permissions", pStr);
+          sessionStorage.setItem("permissions", pStr);
+        } catch {
+          // ignore storage failures
+        }
         setPermissions(p);
         window.dispatchEvent(new Event("permissions:updated"));
       } catch {
@@ -55,13 +68,21 @@ export function useCotizacionPermissions(redirectOn401?: () => void) {
       }
     };
     void load();
-  }, [isAdmin]);
+  }, []);
 
   return useMemo(() => {
-    const canCotizacionesView = asBool(permissions?.cotizaciones?.view, true);
-    const canCotizacionesCreate = asBool(permissions?.cotizaciones?.create, false);
-    const canCotizacionesEdit = asBool(permissions?.cotizaciones?.edit, false);
-    const canCotizacionesDelete = asBool(permissions?.cotizaciones?.delete, false);
+    const canCotizacionesView = isAdmin
+      ? true
+      : asBool(permissions?.cotizaciones?.view, true);
+    const canCotizacionesCreate = isAdmin
+      ? true
+      : asBool(permissions?.cotizaciones?.create, false);
+    const canCotizacionesEdit = isAdmin
+      ? true
+      : asBool(permissions?.cotizaciones?.edit, false);
+    const canCotizacionesDelete = isAdmin
+      ? true
+      : asBool(permissions?.cotizaciones?.delete, false);
     return {
       permissions,
       canCotizacionesView,
@@ -69,5 +90,5 @@ export function useCotizacionPermissions(redirectOn401?: () => void) {
       canCotizacionesEdit,
       canCotizacionesDelete,
     };
-  }, [permissions]);
+  }, [isAdmin, permissions]);
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+﻿import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import PageMeta from "@/components/common/PageMeta";
 import ComponentCard from "@/components/common/ComponentCard";
@@ -17,6 +17,11 @@ import { ClienteFormModal } from "@/components/clientes/ClienteFormModal";
 import { Cliente } from "@/types/cliente";
 import ActionSearchBar from "@/components/kokonutui/action-search-bar";
 import LevantamientoForm from "../OrdenLevantamiento/LevantamientoForm";
+import { Orden, Usuario } from "./ordenesTypes";
+import { useOrdenesBootstrap } from "./useOrdenesBootstrap";
+import { createOrden, deleteOrden, listOrdenes, updateOrden } from "./ordenesApi";
+import { useOrdenesForm } from "./useOrdenesForm";
+import { OrdenFormModal } from "./OrdenFormModal";
 
 const cardShellClass =
   "overflow-hidden rounded-3xl border border-[#e7ded0] bg-[#fffdfa]/95 shadow-[0_30px_80px_-40px_rgba(28,25,23,0.28)] backdrop-blur-sm dark:border-[#273244] dark:bg-[#111827]/80 dark:shadow-[0_30px_80px_-45px_rgba(0,0,0,0.55)]";
@@ -27,59 +32,8 @@ const sectionLabelClass =
   "text-[11px] font-semibold uppercase tracking-[0.16em] text-[#78716c] dark:text-[#8ea0b8] sm:text-xs";
 const claudeHeroHeadingClass =
   "[font-family:Georgia,'Times_New_Roman',serif] text-[clamp(1.85rem,2.8vw,2.6rem)] font-medium leading-[1.2] tracking-[-0.01em] text-[#1c1917] dark:text-[#f8fafc]";
-const claudeSectionHeadingClass =
-  "[font-family:Georgia,'Times_New_Roman',serif] text-[clamp(1.4rem,2vw,2rem)] font-medium leading-[1.2] text-gray-900 dark:text-white";
 const claudeBodyClass = "text-base font-normal leading-[1.6] text-[#57534e] dark:text-[#b7c1d1]";
 const claudeSansStyle = { fontFamily: "Outfit, sans-serif" } as const;
-
-interface Orden {
-  id: number;
-  idx: number;
-  folio?: string | null;
-  cliente_id: number | null;
-  cliente: string;
-  direccion: string;
-  telefono_cliente: string;
-  problematica: string;
-  servicios_realizados: string[];
-  status: 'pendiente' | 'resuelto';
-  comentario_tecnico: string;
-  fecha_inicio: string;
-  hora_inicio: string;
-  fecha_finalizacion: string;
-  hora_termino: string;
-  nombre_encargado: string;
-  nombre_cliente: string;
-  tecnico_asignado?: number | null;
-  quien_instalo?: number | null;
-  quien_entrego?: number | null;
-  tecnico_asignado_username?: string;
-  tecnico_asignado_full_name?: string;
-  firma_encargado_url: string;
-  firma_cliente_url: string;
-  fotos_urls: string[];
-  pdf_url?: string;
-  fecha_creacion: string;
-  tipo_orden?: 'servicio_tecnico' | 'levantamiento' | string;
-}
-
-interface Usuario {
-  id: number;
-  username?: string;
-  email: string;
-  first_name: string;
-  last_name: string;
-  is_staff?: boolean;
-  is_superuser?: boolean;
-}
-
-interface ServicioCatalogo {
-  id: number;
-  nombre: string;
-  descripcion?: string;
-  categoria?: string;
-  activo?: boolean;
-}
 
 let ordenesPageInitialDataLastLoadAt = 0;
 const ORDENES_PAGE_INIT_THROTTLE_MS = 800;
@@ -87,12 +41,6 @@ const getCurrentYearMonth = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 };
-
-let ordenesTecnicoPermissionsLastLoadAt = 0;
-let ordenesTecnicoSignatureLastLoadAt = 0;
-let ordenesTecnicoServiciosLastLoadAt = 0;
-
-
 
 export default function OrdenesTecnico() {
   const navigate = useNavigate();
@@ -105,124 +53,23 @@ export default function OrdenesTecnico() {
   // Auth is handled by httpOnly cookies (credentials: 'include' in fetch interceptor)
   const getToken = () => "cookie";
 
-  const getPermissionsFromStorage = () => {
-    try {
-      const raw = localStorage.getItem('permissions') || sessionStorage.getItem('permissions');
-      return raw ? JSON.parse(raw) : {};
-    } catch {
-      return {};
-    }
-  };
+  const {
+    permissions,
+    canOrdenesView,
+    canOrdenesCreate,
+    canOrdenesEdit,
+    canOrdenesDelete,
+    mySignatureUrl,
+    serviciosDisponibles,
+    setServiciosDisponibles,
+  } = useOrdenesBootstrap({
+    throttleKey: "ordenes-tecnico-page",
+    loadServicios: true,
+  });
 
-  const loadServiciosDisponibles = useCallback(async () => {
-    const token = getToken();
-    if (!token) {
-      setServiciosDisponibles([]);
-      return;
-    }
-
-    try {
-      const res = await fetch(apiUrl('/api/servicios/?page=1&page_size=500&ordering=idx'), {
-        method: 'GET',
-        headers: { ...getAuthHeaders() },
-        cache: 'no-store' as RequestCache,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setServiciosDisponibles([]);
-        return;
-      }
-
-      const results = Array.isArray((data as any)?.results) ? ((data as any).results as ServicioCatalogo[]) : [];
-      const names = results
-        .filter((s) => s && typeof s.nombre === 'string' && s.nombre.trim() && s.activo !== false)
-        .map((s) => s.nombre.trim());
-
-      const merged = Array.from(new Set(names));
-      setServiciosDisponibles(merged);
-    } catch {
-      setServiciosDisponibles([]);
-    }
-  }, []);
-
-  const [permissions, setPermissions] = useState<any>(() => getPermissionsFromStorage());
-  const [mySignatureUrl, setMySignatureUrl] = useState<string>('');
-
-  const canOrdenesView = permissions?.ordenes?.view !== false;
-  const canOrdenesCreate = !!permissions?.ordenes?.create;
-  const canOrdenesEdit = !!permissions?.ordenes?.edit;
-  const canOrdenesDelete = !!permissions?.ordenes?.delete;
-
-  useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-
-    const now = Date.now();
-    if (now - ordenesTecnicoPermissionsLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
-    ordenesTecnicoPermissionsLastLoadAt = now;
-
-    const load = async () => {
-      try {
-        const res = await fetch(apiUrl('/api/me/permissions/'), {
-          method: 'GET',
-          headers: { ...getAuthHeaders() },
-          cache: 'no-store' as RequestCache,
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) return;
-        const p = data?.permissions || {};
-        const pStr = JSON.stringify(p);
-        localStorage.setItem('permissions', pStr);
-        sessionStorage.setItem('permissions', pStr);
-        setPermissions(p);
-      } catch (e) {
-        console.error("Error syncing permissions", e);
-      }
-    };
-    load();
-  }, []);
-
-  useEffect(() => {
-    const now = Date.now();
-    if (now - ordenesTecnicoServiciosLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
-    ordenesTecnicoServiciosLastLoadAt = now;
-    loadServiciosDisponibles();
-  }, [loadServiciosDisponibles]);
-
-  useEffect(() => {
-    const token = getToken();
-    if (!token) return;
-
-    const now = Date.now();
-    if (now - ordenesTecnicoSignatureLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
-    ordenesTecnicoSignatureLastLoadAt = now;
-    const load = async () => {
-      try {
-        const res = await fetch(apiUrl('/api/me/signature/'), {
-          method: 'GET',
-          headers: { ...getAuthHeaders() },
-          cache: 'no-store' as RequestCache,
-        });
-        const data = await res.json().catch(() => null);
-        if (!res.ok) return;
-        const url = data?.url || '';
-        setMySignatureUrl(url);
-      } catch {
-        return;
-      }
-    };
-    load();
-  }, []);
-
-  useEffect(() => {
-    const sync = () => setPermissions(getPermissionsFromStorage());
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [serviciosDisponibles, setServiciosDisponibles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showClienteModal, setShowClienteModal] = useState(false);
@@ -235,7 +82,7 @@ export default function OrdenesTecnico() {
   const [editingOrden, setEditingOrden] = useState<Orden | null>(null);
   const isReadOnly = editingOrden ? !canOrdenesEdit : !canOrdenesCreate;
   const [searchTerm, setSearchTerm] = useState("");
-  // Por defecto no filtramos por mes para no ocultar órdenes recién creadas.
+  // Por defecto no filtramos por mes para no ocultar Ã³rdenes reciÃ©n creadas.
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentYearMonth());
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; index: number | null; url: string | null }>({ open: false, index: null, url: null });
   const [deletingPhoto, setDeletingPhoto] = useState(false);
@@ -307,7 +154,6 @@ export default function OrdenesTecnico() {
     const now = Date.now();
     if (now - ordenesPageInitialDataLastLoadAt < ORDENES_PAGE_INIT_THROTTLE_MS) return;
     ordenesPageInitialDataLastLoadAt = now;
-    loadServiciosDisponibles();
     fetchOrdenes();
     fetchClientes();
     fetchUsuarios();
@@ -340,7 +186,6 @@ export default function OrdenesTecnico() {
     const updated = (Array.isArray(formData.fotos_urls) ? formData.fotos_urls : []).filter((_, i) => i !== index);
     setDeletingPhoto(true);
     try {
-      const token = getToken();
       // Eliminar de Cloudinary
       if (publicId) {
         await fetch(apiUrl('/api/ordenes/delete-image/'), {
@@ -367,7 +212,7 @@ export default function OrdenesTecnico() {
           const updatedOrden = await response.json();
           // Actualizar el estado editingOrden con los datos actualizados
           setEditingOrden(updatedOrden);
-          // Recargar lista de órdenes para reflejar el cambio
+          // Recargar lista de Ã³rdenes para reflejar el cambio
           await fetchOrdenes();
         } else {
           console.error('Error al actualizar fotos en backend:', await response.text());
@@ -420,14 +265,14 @@ export default function OrdenesTecnico() {
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
-          // Evita fondos negros al convertir imágenes con transparencia a JPEG.
+          // Evita fondos negros al convertir imÃ¡genes con transparencia a JPEG.
           if (ctx) {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, width, height);
           }
           ctx?.drawImage(img, 0, 0, width, height);
           
-          // Búsqueda binaria para encontrar la calidad óptima más rápido
+          // BÃºsqueda binaria para encontrar la calidad Ã³ptima mÃ¡s rÃ¡pido
           let minQuality = 0.1;
           let maxQuality = 0.95;
           let attempts = 0;
@@ -494,7 +339,6 @@ export default function OrdenesTecnico() {
     const uploadOne = async (file: File): Promise<string | null> => {
       try {
         const compressed = await compressImage(file, 80, 1400, 1400);
-        const token = getToken();
         const resp = await fetch(apiUrl('/api/ordenes/upload-image/'), {
           method: 'POST',
           headers: {
@@ -558,30 +402,8 @@ export default function OrdenesTecnico() {
     message: string;
   }>({ show: false, variant: "success", title: "", message: "" });
 
-  // Form state
-  const [formData, setFormData] = useState({
-    folio: "",
-    cliente_id: null as number | null,
-    contacto_id: null as number | null,
-    cliente: "",
-    direccion: "",
-    telefono_cliente: "",
-    nombre_cliente: "",
-    problematica: "",
-    servicios_realizados: [] as string[],
-    status: "pendiente" as 'pendiente' | 'resuelto',
-    comentario_tecnico: "",
-    fecha_inicio: new Date().toISOString().split('T')[0],
-    hora_inicio: "",
-    fecha_finalizacion: "",
-    hora_termino: "",
-    nombre_encargado: "",
-    tecnico_asignado: null as number | null,
-    quien_instalo: null as number | null,
-    quien_entrego: null as number | null,
-    firma_encargado_url: mySignatureUrl || "",
-    firma_cliente_url: "",
-    fotos_urls: [] as string[]
+  const { formData, setFormData, resetForm } = useOrdenesForm({
+    defaultFirmaEncargadoUrl: mySignatureUrl || "",
   });
 
 
@@ -728,8 +550,6 @@ export default function OrdenesTecnico() {
       return;
     }
 
-    const token = getToken();
-    if (!token) return;
     try {
       const res = await fetch(apiUrl(`/api/users/accounts/${userId}/signature/`), {
         method: 'GET',
@@ -750,7 +570,7 @@ export default function OrdenesTecnico() {
     const missing: string[] = [];
     if (!formData.cliente_id) missing.push('Cliente');
 
-    if (!formData.telefono_cliente?.trim()) missing.push('Teléfono');
+    if (!formData.telefono_cliente?.trim()) missing.push('TelÃ©fono');
     if (!Array.isArray(formData.servicios_realizados) || formData.servicios_realizados.length === 0) missing.push('Servicios Realizados');
 
     return { ok: missing.length === 0, missing };
@@ -758,9 +578,6 @@ export default function OrdenesTecnico() {
 
   const fetchClientes = async (search = "") => {
     try {
-      const token = getToken();
-      if (!token) return;
-
       const query = new URLSearchParams({
         search: search.trim(),
         page_size: '20', // Limit results for dropdown
@@ -768,7 +585,7 @@ export default function OrdenesTecnico() {
 
       const response = await fetch(apiUrl(`/api/clientes/?${query.toString()}`), {
         headers: {
-          "Authorization": `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json"
         }
       });
@@ -806,7 +623,7 @@ export default function OrdenesTecnico() {
       if (!token) return;
 
       const commonHeaders = {
-        "Authorization": `Bearer ${token}`,
+        ...getAuthHeaders(),
         "Content-Type": "application/json"
       } as HeadersInit;
 
@@ -832,21 +649,10 @@ export default function OrdenesTecnico() {
         setLoading(false);
         return;
       }
-      const response = await fetch(apiUrl(`/api/ordenes/?_ts=${Date.now()}`), {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json"
-        },
-        cache: "no-store" as RequestCache,
-      });
+      const { response, rows: apiRows } = await listOrdenes();
 
       if (response.ok) {
-        let data = await response.json();
-        let rows = Array.isArray(data)
-          ? data
-          : Array.isArray((data as any)?.results)
-            ? (data as any).results
-            : [];
+        let rows = apiRows;
 
         // Filter for technicians if not admin
         const role = (localStorage.getItem('role') || sessionStorage.getItem('role') || '').toLowerCase();
@@ -859,8 +665,8 @@ export default function OrdenesTecnico() {
             const user = JSON.parse(userRaw);
             if (user.id) {
               const userId = Number(user.id);
-              // El backend permite ver órdenes por `tecnico_asignado` o por `creado_por`.
-              // Para no ocultar órdenes recién creadas que todavía no tienen `tecnico_asignado`,
+              // El backend permite ver Ã³rdenes por `tecnico_asignado` o por `creado_por`.
+              // Para no ocultar Ã³rdenes reciÃ©n creadas que todavÃ­a no tienen `tecnico_asignado`,
               // filtramos por ambos campos.
               rows = rows.filter((o: any) => {
                 const tecnicoId = Number(o.tecnico_asignado ?? NaN);
@@ -876,17 +682,17 @@ export default function OrdenesTecnico() {
         console.debug("[OrdenesTecnicoPage] fetchOrdenes idx:", rows.map((r: any) => Number(r?.idx || 0)).filter((n: number) => Number.isFinite(n)));
         setOrdenes(rows);
       } else if (response.status === 401) {
-        console.error("Token inválido o expirado");
+        console.error("Token invÃ¡lido o expirado");
         setOrdenes([]);
       } else if (response.status === 403) {
         console.error("Acceso prohibido");
         setOrdenes([]);
       } else {
-        console.error("Error al cargar órdenes:", response.status);
+        console.error("Error al cargar Ã³rdenes:", response.status);
         setOrdenes([]);
       }
     } catch (error) {
-      console.error("Error al cargar órdenes:", error);
+      console.error("Error al cargar Ã³rdenes:", error);
       setOrdenes([]);
     } finally {
       setLoading(false);
@@ -896,8 +702,7 @@ export default function OrdenesTecnico() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
-    const token = getToken();
-    // Reglas: Cliente, Dirección, Teléfono, Servicios Realizados y Fecha de Inicio son requeridos
+    // Reglas: Cliente, DirecciÃ³n, TelÃ©fono, Servicios Realizados y Fecha de Inicio son requeridos
     const { ok, missing } = validateForm();
     if (!ok) {
       setModalAlert({
@@ -916,14 +721,11 @@ export default function OrdenesTecnico() {
 
     try {
       setIsSaving(true);
-      const url = editingOrden
-        ? apiUrl(`/api/ordenes/${editingOrden.id}/`)
-        : apiUrl("/api/ordenes/");
-      const method = editingOrden ? "PUT" : "POST";
+      const targetOrdenId = editingOrden ? editingOrden.id : null;
 
       // Construir payload, omitiendo tecnico_asignado si es null
       const payload: any = { ...formData };
-      // Firma del encargado se maneja desde el perfil del usuario (no enviar base64 desde órdenes)
+      // Firma del encargado se maneja desde el perfil del usuario (no enviar base64 desde Ã³rdenes)
       delete payload.firma_encargado_url;
       delete payload.contacto_id;
       if (payload.tecnico_asignado == null) {
@@ -936,7 +738,7 @@ export default function OrdenesTecnico() {
         delete payload.quien_entrego;
       }
 
-      // Saneamiento: convertir strings vacíos a null en campos opcionales
+      // Saneamiento: convertir strings vacÃ­os a null en campos opcionales
       const toNullIfEmpty = (v: any) => (typeof v === 'string' && v.trim() === '' ? null : v);
       payload.direccion = toNullIfEmpty(payload.direccion);
       payload.telefono_cliente = toNullIfEmpty(payload.telefono_cliente);
@@ -953,17 +755,12 @@ export default function OrdenesTecnico() {
       // Asegurar arreglo para servicios_realizados
       if (!Array.isArray(payload.servicios_realizados)) payload.servicios_realizados = [];
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      const { response, data } = targetOrdenId
+        ? await updateOrden(targetOrdenId, payload)
+        : await createOrden(payload);
 
       if (response.ok) {
-        const savedOrden = await response.json().catch(() => null);
+        const savedOrden = data as any;
         const cid = payload?.cliente_id;
 
         if (tipoOrden === 'levantamiento' && savedOrden?.id && levantamientoSnapshotRef.current) {
@@ -1005,7 +802,7 @@ export default function OrdenesTecnico() {
                 cliente: clienteNombre,
                 prospecto: !cid,
                 contacto: contactoNombre,
-                // usar un valor válido para choices de medio_contacto (ver backend MEDIO_CONTACTO_CHOICES)
+                // usar un valor vÃ¡lido para choices de medio_contacto (ver backend MEDIO_CONTACTO_CHOICES)
                 medio_contacto: 'OTRO',
                 status: 'PENDIENTE',
                 fecha: todayIso,
@@ -1014,10 +811,10 @@ export default function OrdenesTecnico() {
                 iva_pct: ivaPct,
                 iva,
                 total,
-                texto_arriba_precios: 'A continuación cotización solicitada:',
+                texto_arriba_precios: 'A continuaciÃ³n cotizaciÃ³n solicitada:',
                 terminos: "",
-                // Para evitar errores de validación de URL en el backend,
-                // NO enviamos thumbnail_url en la creación automática desde levantamiento.
+                // Para evitar errores de validaciÃ³n de URL en el backend,
+                // NO enviamos thumbnail_url en la creaciÃ³n automÃ¡tica desde levantamiento.
                 items: cercoItems.map((it: any, index: number) => ({
                   producto_externo_id: String(it.producto_externo_id || ''),
                   producto_nombre: String(it.producto_nombre || ''),
@@ -1032,7 +829,7 @@ export default function OrdenesTecnico() {
 
               try {
                 const ordenMarker = `ORDEN #${savedOrden.id}`;
-                // Buscar si ya existe una cotización ligada a esta orden
+                // Buscar si ya existe una cotizaciÃ³n ligada a esta orden
                 let existingCotizacionId: number | null = null;
                 try {
                   const searchParam = encodeURIComponent(ordenMarker);
@@ -1051,7 +848,7 @@ export default function OrdenesTecnico() {
                     }
                   }
                 } catch (searchErr) {
-                  console.warn('No se pudo buscar cotización existente para la orden desde levantamiento (OrdenesTecnicoPage):', searchErr);
+                  console.warn('No se pudo buscar cotizaciÃ³n existente para la orden desde levantamiento (OrdenesTecnicoPage):', searchErr);
                 }
 
                 const isUpdate = existingCotizacionId != null;
@@ -1081,18 +878,18 @@ export default function OrdenesTecnico() {
                     }
                   }
                   console.warn(
-                    `No se pudo ${isUpdate ? 'actualizar' : 'crear'} la cotización desde levantamiento (OrdenesTecnicoPage). Status:`,
+                    `No se pudo ${isUpdate ? 'actualizar' : 'crear'} la cotizaciÃ³n desde levantamiento (OrdenesTecnicoPage). Status:`,
                     cotRes.status,
                     'Detalle:',
                     typeof detail === 'string' ? detail : JSON.stringify(detail, null, 2),
                   );
                 }
               } catch (cotErr) {
-                console.error('Error de red al guardar cotización desde levantamiento (OrdenesTecnicoPage):', cotErr);
+                console.error('Error de red al guardar cotizaciÃ³n desde levantamiento (OrdenesTecnicoPage):', cotErr);
               }
             }
           } catch (e) {
-            console.error('Error creando cotización desde levantamiento (OrdenesTecnicoPage):', e);
+            console.error('Error creando cotizaciÃ³n desde levantamiento (OrdenesTecnicoPage):', e);
           }
 
           setOrdenes((prev) => {
@@ -1137,8 +934,8 @@ export default function OrdenesTecnico() {
           const celular = String(payload?.telefono_cliente || '').trim();
           const contactoIdToUpdate = formData.contacto_id != null ? Number(formData.contacto_id) : null;
 
-          // Solo actualizar un contacto existente seleccionado explícitamente.
-          // No crear contactos nuevos automáticamente aquí para evitar duplicados.
+          // Solo actualizar un contacto existente seleccionado explÃ­citamente.
+          // No crear contactos nuevos automÃ¡ticamente aquÃ­ para evitar duplicados.
           if (contactoIdToUpdate != null) {
             const body: any = {};
             if (nombre) body.nombre_apellido = nombre;
@@ -1192,30 +989,7 @@ export default function OrdenesTecnico() {
 
         setShowModal(false);
         setActiveTab("cliente");
-        setFormData({
-          folio: "",
-          cliente_id: null,
-          contacto_id: null,
-          cliente: "",
-          direccion: "",
-          telefono_cliente: "",
-          nombre_cliente: "",
-          problematica: "",
-          servicios_realizados: [],
-          status: "pendiente",
-          comentario_tecnico: "",
-          fecha_inicio: new Date().toISOString().split('T')[0],
-          hora_inicio: "",
-          fecha_finalizacion: "",
-          hora_termino: "",
-          nombre_encargado: "",
-          tecnico_asignado: null,
-          quien_instalo: null,
-          quien_entrego: null,
-          firma_encargado_url: "",
-          firma_cliente_url: "",
-          fotos_urls: []
-        });
+        resetForm();
         setEditingOrden(null);
 
         // Show success alert (3s)
@@ -1263,7 +1037,7 @@ export default function OrdenesTecnico() {
 
   const handleDeleteClick = (orden: Orden) => {
     if (!canOrdenesDelete) {
-      setAlert({ show: true, variant: 'warning', title: 'Sin permiso', message: 'No tienes permiso para eliminar órdenes.' });
+      setAlert({ show: true, variant: 'warning', title: 'Sin permiso', message: 'No tienes permiso para eliminar Ã³rdenes.' });
       setTimeout(() => setAlert(prev => ({ ...prev, show: false })), 2500);
       return;
     }
@@ -1274,12 +1048,8 @@ export default function OrdenesTecnico() {
   const handleConfirmDelete = async () => {
     if (!ordenToDelete) return;
 
-    const token = getToken();
     try {
-      const response = await fetch(apiUrl(`/api/ordenes/${ordenToDelete.id}/`), {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${token}` }
-      });
+      const { response } = await deleteOrden(ordenToDelete.id);
 
       if (response.ok) {
         await fetchOrdenes();
@@ -1320,7 +1090,7 @@ export default function OrdenesTecnico() {
   const handleEdit = (orden: Orden) => {
     formNonceRef.current += 1;
     if (!canOrdenesEdit) {
-      setAlert({ show: true, variant: 'warning', title: 'Sin permiso', message: 'No tienes permiso para editar órdenes.' });
+      setAlert({ show: true, variant: 'warning', title: 'Sin permiso', message: 'No tienes permiso para editar Ã³rdenes.' });
       setTimeout(() => setAlert(prev => ({ ...prev, show: false })), 2500);
       return;
     }
@@ -1361,32 +1131,9 @@ export default function OrdenesTecnico() {
     setShowModal(false);
     setActiveTab("cliente");
     setTipoOrden('servicio_tecnico');
-    setFormData({
-      folio: "",
-      cliente_id: null,
-      contacto_id: null,
-      cliente: "",
-      direccion: "",
-      telefono_cliente: "",
-      nombre_cliente: "",
-      problematica: "",
-      servicios_realizados: [],
-      status: "pendiente",
-      comentario_tecnico: "",
-      fecha_inicio: new Date().toISOString().split('T')[0],
-      hora_inicio: "",
-      fecha_finalizacion: "",
-      hora_termino: "",
-      nombre_encargado: "",
-      tecnico_asignado: null,
-      quien_instalo: null,
-      quien_entrego: null,
-      firma_encargado_url: "",
-      firma_cliente_url: "",
-      fotos_urls: []
-    });
+    resetForm();
     setEditingOrden(null);
-    // Limpiar estados de búsqueda de dropdowns
+    // Limpiar estados de bÃºsqueda de dropdowns
     setClienteSearch('');
     setTecnicoSearch('');
     setQuienInstaloSearch('');
@@ -1433,7 +1180,7 @@ export default function OrdenesTecnico() {
       const t = Date.parse(String(v));
       return Number.isFinite(t) ? t : 0;
     };
-    // Más recientes arriba
+    // MÃ¡s recientes arriba
     return list.slice().sort((a, b) => {
       const at = toTs((a as any).fecha_creacion || (a as any).fecha_inicio) || 0;
       const bt = toTs((b as any).fecha_creacion || (b as any).fecha_inicio) || 0;
@@ -1444,8 +1191,8 @@ export default function OrdenesTecnico() {
     });
   }, [ordenes, searchTerm, selectedMonth, filterStatus, filterServicio, filterDate]);
 
-  // Paginación
-  // Paginación por mes (mostrar todas las órdenes del mes seleccionado)
+  // PaginaciÃ³n
+  // PaginaciÃ³n por mes (mostrar todas las Ã³rdenes del mes seleccionado)
   const startIndex = 0;
   const currentOrdenes = shownList;
 
@@ -1668,12 +1415,12 @@ export default function OrdenesTecnico() {
   }, [formData?.tecnico_asignado]);
 
   const addServicio = (servicio: string) => {
-    // Selección ÚNICA: reemplazar la lista por el servicio elegido
+    // SelecciÃ³n ÃšNICA: reemplazar la lista por el servicio elegido
     setFormData({
       ...formData,
       servicios_realizados: [servicio]
     });
-    // Limpiar búsqueda y cerrar dropdown
+    // Limpiar bÃºsqueda y cerrar dropdown
     setServicioSearch('');
   };
 
@@ -1705,8 +1452,8 @@ export default function OrdenesTecnico() {
       style={claudeSansStyle}
     >
       <PageMeta
-        title="Órdenes de Trabajo | Sistema Grupo Intrax GPS"
-        description="Gestión de órdenes de servicio para el sistema de administración Grupo Intrax GPS"
+        title="Ã“rdenes de Trabajo | Sistema Grupo Intrax GPS"
+        description="GestiÃ³n de Ã³rdenes de servicio para el sistema de administraciÃ³n Grupo Intrax GPS"
       />
       <nav
         className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-medium text-[#78716c] dark:text-[#8ea0b8] sm:text-[13px]"
@@ -1718,7 +1465,7 @@ export default function OrdenesTecnico() {
         <span className="text-[#d6d3d1] dark:text-[#334155]" aria-hidden>
           /
         </span>
-        <span className="text-[#44403c] dark:text-[#cbd5e1]">Mis órdenes</span>
+        <span className="text-[#44403c] dark:text-[#cbd5e1]">Mis Ã³rdenes</span>
       </nav>
 
       {alert.show && (
@@ -1736,11 +1483,11 @@ export default function OrdenesTecnico() {
           </div>
           <div className="min-w-0 flex-1">
             <p className={sectionLabelClass}>
-              Operación
+              OperaciÃ³n
             </p>
-            <h1 className={`mt-0.5 ${claudeHeroHeadingClass}`}>Mis órdenes</h1>
+            <h1 className={`mt-0.5 ${claudeHeroHeadingClass}`}>Mis Ã³rdenes</h1>
             <p className={`mt-1 max-w-2xl ${claudeBodyClass}`}>
-              Órdenes donde eres el técnico asignado o el creador. Registra servicio, firmas y evidencia desde aquí.
+              Ã“rdenes donde eres el tÃ©cnico asignado o el creador. Registra servicio, firmas y evidencia desde aquÃ­.
             </p>
             <div className="mt-3 h-px w-full max-w-xl bg-gradient-to-r from-[#ff801f]/35 via-[#ffbf8d]/30 to-transparent dark:from-[#ff9a52]/35 dark:via-[#64748b]/25 dark:to-transparent" />
           </div>
@@ -1756,7 +1503,7 @@ export default function OrdenesTecnico() {
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500 sm:text-[10px]">Órdenes del mes</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500 sm:text-[10px]">Ã“rdenes del mes</p>
               <p className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white sm:text-lg">{ordenStats.monthTotal}</p>
             </div>
           </div>
@@ -1799,14 +1546,14 @@ export default function OrdenesTecnico() {
           <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar en tus órdenes…"
+            placeholder="Buscar en tus Ã³rdenesâ€¦"
             className={searchInputClass}
           />
           {searchTerm && (
             <button
               type="button"
               onClick={() => setSearchTerm('')}
-              aria-label="Limpiar búsqueda"
+              aria-label="Limpiar bÃºsqueda"
               className="absolute inset-y-0 right-0 my-1 mr-1 inline-flex h-8 min-w-[40px] items-center justify-center rounded-md text-gray-400 hover:bg-gray-200/60 hover:text-gray-600 dark:hover:bg-white/[0.06] sm:h-9 sm:min-w-[44px] sm:rounded-lg"
             >
               <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
@@ -1844,7 +1591,7 @@ export default function OrdenesTecnico() {
       <ComponentCard
         compact
         title="Listado"
-        desc="Órdenes visibles para tu cuenta. Usa filtros para acotar por estado, servicio o fecha."
+        desc="Ã“rdenes visibles para tu cuenta. Usa filtros para acotar por estado, servicio o fecha."
         className={`overflow-visible border-[#e7ded0] bg-[#fffdfa]/95 shadow-[0_30px_80px_-40px_rgba(28,25,23,0.22)] dark:border-[#273244] dark:bg-[#111827]/80 dark:shadow-[0_30px_80px_-45px_rgba(0,0,0,0.5)] ${cardShellClass}`}
         actions={
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
@@ -1863,8 +1610,9 @@ export default function OrdenesTecnico() {
               {filterOpen && (
                 <div className="absolute right-0 z-[110] mt-2 w-72 max-h-[min(80vh,24rem)] overflow-auto rounded-xl border border-[#e7ded0] bg-[#fffdfa] p-4 shadow-xl ring-1 ring-black/5 dark:border-[#334155] dark:bg-[#111a2b] dark:ring-white/10">
                   <div className="mb-4">
-                    <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Estado</label>
+                    <label htmlFor="ordenes-tecnico-filter-estado" className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Estado</label>
                     <select
+                      id="ordenes-tecnico-filter-estado"
                       value={filterStatus}
                       onChange={(e) => setFilterStatus(e.target.value as any)}
                       className="h-10 w-full rounded-lg border border-[#e2d9ca] bg-[#fffdfa] px-3 text-sm text-[#1c1917] outline-none focus:border-[#ff801f] focus:bg-white focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#0f172a] dark:text-gray-200 dark:focus:bg-[#0f172a]"
@@ -1875,7 +1623,7 @@ export default function OrdenesTecnico() {
                     </select>
                   </div>
                   <div className="mb-4">
-                    <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Servicios Realizados</label>
+                    <p className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Servicios Realizados</p>
                     <div className="grid grid-cols-1 gap-2">
                       {serviciosDisponibles.map((srv) => {
                         const checked = filterServicio.includes(srv);
@@ -1902,7 +1650,7 @@ export default function OrdenesTecnico() {
                     )}
                   </div>
                   <div className="mb-4">
-                    <label className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Fecha</label>
+                    <label htmlFor="filtro-fecha" className="mb-2 block text-xs font-medium text-gray-700 dark:text-gray-300">Fecha</label>
                     <div className="relative w-full">
                       <DatePicker
                         id="filtro-fecha"
@@ -1959,7 +1707,7 @@ export default function OrdenesTecnico() {
                   <TableCell isHeader className="px-2 py-2 text-left w-2/5 min-w-[220px] whitespace-nowrap text-gray-700 dark:text-gray-300">Cliente</TableCell>
                   <TableCell isHeader className="px-2 py-2 text-left w-1/5 min-w-[220px] text-gray-700 dark:text-gray-300">Detalles</TableCell>
                   <TableCell isHeader className="px-2 py-2 text-left w-[130px] min-w-[130px] whitespace-nowrap text-gray-700 dark:text-gray-300">Fechas</TableCell>
-                  <TableCell isHeader className="px-2 py-2 text-left w-[160px] min-w-[160px] whitespace-nowrap text-gray-700 dark:text-gray-300">Técnico</TableCell>
+                  <TableCell isHeader className="px-2 py-2 text-left w-[160px] min-w-[160px] whitespace-nowrap text-gray-700 dark:text-gray-300">TÃ©cnico</TableCell>
                   <TableCell isHeader className="px-2 py-2 text-center w-[110px] min-w-[110px] whitespace-nowrap text-gray-700 dark:text-gray-300">Estado</TableCell>
                   <TableCell isHeader className="px-2 py-2 text-center w-[120px] min-w-[120px] whitespace-nowrap text-gray-700 dark:text-gray-300">Acciones</TableCell>
                 </TableRow>
@@ -1999,10 +1747,10 @@ export default function OrdenesTecnico() {
                             type="button"
                             onClick={() => setProblematicaModal({ open: true, content: orden.problematica || '-' })}
                             className="inline-flex items-center gap-1 text-[11px] sm:text-[12px] text-blue-600 hover:underline dark:text-blue-400"
-                            title="Ver problemática"
+                            title="Ver problemÃ¡tica"
                           >
                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
-                            Problemática
+                            ProblemÃ¡tica
                           </button>
                           <button
                             type="button"
@@ -2028,7 +1776,7 @@ export default function OrdenesTecnico() {
                             type="button"
                             onClick={() => setComentarioModal({ open: true, content: (orden.comentario_tecnico || '') as string })}
                             className="inline-flex items-center gap-1 text-[12px] text-blue-600 hover:underline dark:text-blue-400"
-                            title="Ver comentario del técnico"
+                            title="Ver comentario del tÃ©cnico"
                           >
                             <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>
                             Comentarios
@@ -2086,7 +1834,7 @@ export default function OrdenesTecnico() {
                   <TableRow>
                     <TableCell className="px-2 py-2">&nbsp;</TableCell>
                     <TableCell className="px-2 py-2">&nbsp;</TableCell>
-                    <TableCell className="px-2 py-2 text-center text-[12px] text-gray-500">Sin órdenes</TableCell>
+                    <TableCell className="px-2 py-2 text-center text-[12px] text-gray-500">Sin Ã³rdenes</TableCell>
                     <TableCell className="px-2 py-2">&nbsp;</TableCell>
                     <TableCell className="px-2 py-2">&nbsp;</TableCell>
                     <TableCell className="px-2 py-2">&nbsp;</TableCell>
@@ -2097,14 +1845,14 @@ export default function OrdenesTecnico() {
             </Table>
           </div>
 
-          {/* Paginación */}
+          {/* PaginaciÃ³n */}
           {!loading && (
             <div className="border-t border-gray-200 px-5 py-4 dark:border-gray-800">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 flex-wrap">
                 <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
                   Mostrando <span className="font-medium text-gray-900 dark:text-white">{shownList.length > 0 ? 1 : 0}</span> a{" "}
                   <span className="font-medium text-gray-900 dark:text-white">{shownList.length > 0 ? shownList.length : 0}</span> de{" "}
-                  <span className="font-medium text-gray-900 dark:text-white">{shownList.length}</span> órdenes
+                  <span className="font-medium text-gray-900 dark:text-white">{shownList.length}</span> Ã³rdenes
                 </p>
 
                 <div className="flex items-center gap-2 flex-wrap">
@@ -2163,7 +1911,7 @@ export default function OrdenesTecnico() {
                 <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 8v4l3 3" /><circle cx="12" cy="12" r="9" /></svg>
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Problemática</h3>
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">ProblemÃ¡tica</h3>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Detalle completo reportado por el cliente</p>
               </div>
             </div>
@@ -2218,8 +1966,8 @@ export default function OrdenesTecnico() {
                 <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></svg>
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Comentario del Técnico</h3>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">Observaciones y notas del técnico</p>
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Comentario del TÃ©cnico</h3>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Observaciones y notas del tÃ©cnico</p>
               </div>
             </div>
           </div>
@@ -2233,39 +1981,16 @@ export default function OrdenesTecnico() {
       </Modal>
 
       {/* Modal Crear/Editar */}
-      <Modal
-        mobileBottomSheet
+      <OrdenFormModal
         isOpen={showModal}
         onClose={handleCloseModal}
-        closeOnBackdropClick={false}
         closeOnEscape={!confirmDelete.open}
-        className="w-[94vw] max-h-[92vh] max-w-4xl overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa] p-0 dark:border-[#273244] dark:bg-[#111a2b]"
+        sectionLabel="OperaciÃ³n Â· Mis Ã³rdenes"
+        title={`${editingOrden ? 'Editar' : 'Nueva'} Orden de ${tipoOrdenLabel}`}
+        subtitle="Captura y revisa los datos antes de guardar"
+        formRef={formScrollRef}
+        onSubmit={handleSubmit}
       >
-        <div>
-          {/* Header */}
-          <header className="relative shrink-0 border-b border-[#e7ded0] bg-[#fcfaf6] px-6 py-5 pr-14 dark:border-[#334155] dark:bg-[#111827] sm:pr-16">
-            <div className="pointer-events-none absolute left-0 top-0 h-0.5 w-full bg-[#ff801f]" aria-hidden />
-            <div className="flex items-start gap-3">
-              <span className="inline-flex items-center justify-center w-11 h-11 rounded-2xl bg-[#ff801f] text-black shadow-sm">
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-              <div className="min-w-0">
-                <p className={sectionLabelClass}>Operación · Mis órdenes</p>
-                <h3 className={`mt-1 ${claudeSectionHeadingClass}`}>
-                  {editingOrden ? 'Editar' : 'Nueva'} Orden de {tipoOrdenLabel}
-                </h3>
-                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                  Captura y revisa los datos antes de guardar
-                </p>
-              </div>
-            </div>
-          </header>
-
-          {/* Body */}
-
-          <form ref={formScrollRef} onSubmit={handleSubmit} className="custom-scrollbar max-h-[80vh] space-y-5 overflow-y-auto bg-[#fffdfa] p-4 dark:bg-[#111a2b] sm:p-5">
 
             {/* Modal Alert */}
             {modalAlert.show && (
@@ -2309,14 +2034,15 @@ export default function OrdenesTecnico() {
                     <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Tipo de Orden de Trabajo</h4>
                   </div>
                   <div className="rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-4 shadow-theme-xs dark:border-[#334155] dark:bg-[#0f172a]/80">
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Selecciona el tipo de orden</label>
+                    <label htmlFor="orden-tecnico-tipo-orden" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-2">Selecciona el tipo de orden</label>
                     <select
+                      id="orden-tecnico-tipo-orden"
                       value={tipoOrden}
                       onChange={(e) => setTipoOrden(e.target.value as any)}
                       disabled={!!editingOrden || isReadOnly}
                       className={`w-full h-10 rounded-lg border border-gray-300 dark:border-[#334155] text-sm px-3 shadow-theme-xs outline-none ${!!editingOrden || isReadOnly ? 'bg-gray-100 text-gray-600 cursor-not-allowed dark:bg-[#0f172a] dark:text-gray-400' : 'bg-white text-gray-800 dark:bg-[#0f172a] dark:text-gray-200 focus:border-[#ff801f] focus:ring-2 focus:ring-[#ff801f]/20'}`}
                     >
-                      <option value="servicio_tecnico">Servicio Técnico</option>
+                      <option value="servicio_tecnico">Servicio TÃ©cnico</option>
                       <option value="levantamiento">Levantamiento</option>
                       <option value="instalaciones">Instalaciones</option>
                       <option value="mantenimiento">Mantenimiento</option>
@@ -2340,7 +2066,7 @@ export default function OrdenesTecnico() {
 
             {activeTab === "cliente" && (
               <>
-                {/* SECCIÓN 1: Detalles Generales */}
+                {/* SECCIÃ“N 1: Detalles Generales */}
                 <div className="space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-[#334155]">
                 <svg className="w-5 h-5 text-[#ff801f] dark:text-[#ffa057]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2351,8 +2077,9 @@ export default function OrdenesTecnico() {
               <div className="space-y-4 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-4 shadow-theme-xs dark:border-[#334155] dark:bg-[#0f172a]/80">
                 {editingOrden && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Folio</label>
+                    <label htmlFor="orden-tecnico-folio" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Folio</label>
                     <input
+                      id="orden-tecnico-folio"
                       type="text"
                       value={(formData as any).folio || ''}
                       readOnly={isReadOnly}
@@ -2371,7 +2098,7 @@ export default function OrdenesTecnico() {
                       showAllActions={true}
                       defaultOpen={false}
                       label="Cliente"
-                      placeholder="Buscar cliente por nombre o teléfono..."
+                      placeholder="Buscar cliente por nombre o telÃ©fono..."
                       value={clienteSearch || formData.cliente || ''}
                       onQueryChange={(q: string) => setClienteSearch(q)}
 
@@ -2410,7 +2137,7 @@ export default function OrdenesTecnico() {
                     <button
                       type="button"
                       onClick={() => selectCliente(null)}
-                      aria-label="Limpiar selección"
+                      aria-label="Limpiar selecciÃ³n"
                       className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition mt-[20px]"
                     >
                       <svg
@@ -2429,11 +2156,12 @@ export default function OrdenesTecnico() {
                     </button>
                   )}
                 </div>
-                {/* 2. Nombre del Cliente y Técnico Asignado */}
+                {/* 2. Nombre del Cliente y TÃ©cnico Asignado */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Nombre del Cliente</label>
+                    <label htmlFor="orden-tecnico-nombre-cliente" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Nombre del Cliente</label>
                     <input
+                      id="orden-tecnico-nombre-cliente"
                       type="text"
                       value={formData.nombre_cliente}
                       readOnly={isReadOnly}
@@ -2448,8 +2176,8 @@ export default function OrdenesTecnico() {
                       <ActionSearchBar
                         actions={quienInstaloActions as any}
                         defaultOpen={false}
-                        label="Técnico Asignado"
-                        placeholder="Buscar técnico..."
+                        label="TÃ©cnico Asignado"
+                        placeholder="Buscar tÃ©cnico..."
                         value={tecnicoSearch || (formData.tecnico_asignado ? (() => {
                           const tecnicoId = Number(formData.tecnico_asignado);
                           const u = usuarios.find(u => u.id === tecnicoId);
@@ -2467,7 +2195,7 @@ export default function OrdenesTecnico() {
                       <button
                         type="button"
                         onClick={() => selectTecnico(null)}
-                        aria-label="Limpiar selección"
+                        aria-label="Limpiar selecciÃ³n"
                         className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition mt-[20px]"
                       >
                         <svg
@@ -2495,8 +2223,8 @@ export default function OrdenesTecnico() {
                       <ActionSearchBar
                         actions={quienEntregoActions as any}
                         defaultOpen={false}
-                        label="¿Quien instaló?"
-                        placeholder="Buscar técnico..."
+                        label="Â¿Quien instalÃ³?"
+                        placeholder="Buscar tÃ©cnico..."
                         value={quienInstaloSearch || (formData.quien_instalo ? (() => {
                           const tecnicoId = Number(formData.quien_instalo);
                           const u = usuarios.find(u => u.id === tecnicoId);
@@ -2514,7 +2242,7 @@ export default function OrdenesTecnico() {
                       <button
                         type="button"
                         onClick={() => selectQuienInstalo(null)}
-                        aria-label="Limpiar selección"
+                        aria-label="Limpiar selecciÃ³n"
                         className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition mt-[20px]"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -2529,8 +2257,8 @@ export default function OrdenesTecnico() {
                       <ActionSearchBar
                         actions={tecnicoActions as any}
                         defaultOpen={false}
-                        label="¿Quien entregó?"
-                        placeholder="Buscar técnico..."
+                        label="Â¿Quien entregÃ³?"
+                        placeholder="Buscar tÃ©cnico..."
                         value={quienEntregoSearch || (formData.quien_entrego ? (() => {
                           const tecnicoId = Number(formData.quien_entrego);
                           const u = usuarios.find(u => u.id === tecnicoId);
@@ -2548,7 +2276,7 @@ export default function OrdenesTecnico() {
                       <button
                         type="button"
                         onClick={() => selectQuienEntrego(null)}
-                        aria-label="Limpiar selección"
+                        aria-label="Limpiar selecciÃ³n"
                         className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition mt-[20px]"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -2567,7 +2295,7 @@ export default function OrdenesTecnico() {
 
             {activeTab === "cliente" && (
               <>
-                {/* SECCIÓN 2: Detalles del Cliente */}
+                {/* SECCIÃ“N 2: Detalles del Cliente */}
                 <div className="space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-[#334155]">
                 <svg className="w-5 h-5 text-[#ff801f] dark:text-[#ffa057]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2576,11 +2304,12 @@ export default function OrdenesTecnico() {
                 <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Detalles del Cliente</h4>
               </div>
               <div className="space-y-4 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-4 shadow-theme-xs dark:border-[#334155] dark:bg-[#0f172a]/80">
-                {/* Teléfono - Solo números */}
+                {/* TelÃ©fono - Solo nÃºmeros */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Teléfono</label>
+                  <label htmlFor="orden-tecnico-cliente-telefono" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">TelÃ©fono</label>
                   <div className="flex items-center gap-2">
                     <input
+                      id="orden-tecnico-cliente-telefono"
                       type="tel"
                       value={formData.telefono_cliente}
                       readOnly={isReadOnly}
@@ -2595,7 +2324,7 @@ export default function OrdenesTecnico() {
                         }
                       }}
                       className={`w-full h-10 rounded-lg border border-gray-300 dark:border-gray-700 text-sm px-3 shadow-theme-xs outline-none ${isReadOnly ? 'bg-gray-100 text-gray-600 cursor-not-allowed dark:bg-gray-800/50 dark:text-gray-400' : 'bg-white text-gray-800 dark:bg-gray-800 dark:text-gray-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200/70'}`}
-                      placeholder="Teléfono del cliente"
+                      placeholder="TelÃ©fono del cliente"
                       maxLength={10}
                     />
                     <a
@@ -2614,10 +2343,10 @@ export default function OrdenesTecnico() {
                   </div>
                 </div>
 
-                {/* Dirección con botones */}
+                {/* DirecciÃ³n con botones */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">Dirección</label>
+                    <label htmlFor="orden-tecnico-cliente-direccion" className="block text-xs font-medium text-gray-600 dark:text-gray-300">DirecciÃ³n</label>
                     <button
                       type="button"
                       onClick={() => setShowMapModal(true)}
@@ -2631,13 +2360,14 @@ export default function OrdenesTecnico() {
                   </div>
                   <div className="relative">
                     <textarea
+                      id="orden-tecnico-cliente-direccion"
                       value={formData.direccion}
                       readOnly={isReadOnly}
                       disabled={isReadOnly}
                       onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
                       rows={2}
                     className={`w-full rounded-lg border border-gray-300 dark:border-[#334155] text-sm px-3 py-2 pr-12 shadow-theme-xs outline-none resize-none ${isReadOnly ? 'bg-gray-100 text-gray-600 cursor-not-allowed dark:bg-[#0f172a] dark:text-gray-400' : 'bg-white text-gray-800 dark:bg-[#0f172a] dark:text-gray-200 focus:border-[#ff801f] focus:ring-2 focus:ring-[#ff801f]/20'}`}
-                      placeholder="Dirección, coordenadas o URL de Google Maps"
+                      placeholder="DirecciÃ³n, coordenadas o URL de Google Maps"
                     />
                     {formData.direccion && (
                       <button
@@ -2681,19 +2411,20 @@ export default function OrdenesTecnico() {
 
             {activeTab === "orden" && (
               <>
-                {/* SECCIÓN 3: Descripción de la Orden */}
+                {/* SECCIÃ“N 3: DescripciÃ³n de la Orden */}
                 <div className="space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-[#334155]">
                 <svg className="w-5 h-5 text-[#ff801f] dark:text-[#ffa057]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Descripción de la Orden</h4>
+                <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">DescripciÃ³n de la Orden</h4>
               </div>
               <div className="space-y-4 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-4 shadow-theme-xs dark:border-[#334155] dark:bg-[#0f172a]/80">
-                {/* Problemática */}
+                {/* ProblemÃ¡tica */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Problemática</label>
+                  <label htmlFor="orden-tecnico-problematica" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">ProblemÃ¡tica</label>
                   <textarea
+                    id="orden-tecnico-problematica"
                     value={formData.problematica}
                     readOnly={isReadOnly}
                     disabled={isReadOnly}
@@ -2732,7 +2463,7 @@ export default function OrdenesTecnico() {
                     <button
                       type="button"
                       onClick={() => setFormData({ ...formData, servicios_realizados: [] })}
-                      aria-label="Limpiar selección"
+                      aria-label="Limpiar selecciÃ³n"
                       className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition mt-[20px]"
                     >
                       <svg
@@ -2770,38 +2501,40 @@ export default function OrdenesTecnico() {
                           }}
                           className="hover:text-brand-900 dark:hover:text-brand-100 ml-1"
                         >
-                          ×
+                          Ã—
                         </button>
                       )}
                     </span>
                   ))}
                 </div>
 
-                {/* Comentario del Técnico (misma sección / card que Descripción de la Orden) */}
+                {/* Comentario del TÃ©cnico (misma secciÃ³n / card que DescripciÃ³n de la Orden) */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Comentario del Técnico</label>
+                  <label htmlFor="orden-tecnico-comentario" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Comentario del TÃ©cnico</label>
                   <textarea
+                    id="orden-tecnico-comentario"
                     value={formData.comentario_tecnico}
                     readOnly={isReadOnly}
                     disabled={isReadOnly}
                     onChange={(e) => setFormData({ ...formData, comentario_tecnico: e.target.value })}
                     rows={3}
                     className={`w-full rounded-lg border border-gray-300 dark:border-gray-700 text-sm px-3 py-2 shadow-theme-xs outline-none resize-none ${isReadOnly ? 'bg-gray-100 text-gray-600 cursor-not-allowed dark:bg-gray-800/50 dark:text-gray-400' : 'bg-white text-gray-800 dark:bg-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500 focus:ring-2 focus:ring-brand-200/70 dark:focus:border-brand-400 dark:focus:ring-brand-900/40'}`}
-                    placeholder="Observaciones del técnico..."
+                    placeholder="Observaciones del tÃ©cnico..."
                   />
                 </div>
 
                 {/* Estado del Problema */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Estado del Problema</label>
+                  <label htmlFor="orden-tecnico-estado-problema" className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Estado del Problema</label>
                   <select
+                    id="orden-tecnico-estado-problema"
                     value={formData.status}
                     disabled={isReadOnly}
                     onChange={(e) => setFormData({ ...formData, status: e.target.value as 'pendiente' | 'resuelto' })}
                     className={`w-full h-10 rounded-lg border border-gray-300 dark:border-gray-700 text-sm px-3 shadow-theme-xs outline-none ${isReadOnly ? 'bg-gray-100 text-gray-600 cursor-not-allowed dark:bg-gray-800/50 dark:text-gray-400' : 'bg-white text-gray-800 dark:bg-gray-800 dark:text-gray-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-200/70 dark:focus:border-brand-400 dark:focus:ring-brand-900/40'}`}
                   >
                     <option value="pendiente">No, pendiente</option>
-                    <option value="resuelto">Sí, problema resuelto</option>
+                    <option value="resuelto">SÃ­, problema resuelto</option>
                   </select>
                 </div>
               </div>
@@ -2811,7 +2544,7 @@ export default function OrdenesTecnico() {
 
             {activeTab === "cliente" && (
               <>
-                {/* SECCIÓN 4: Detalles de Tiempo */}
+                {/* SECCIÃ“N 4: Detalles de Tiempo */}
 
                 <div className="space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-[#334155]">
@@ -2853,12 +2586,12 @@ export default function OrdenesTecnico() {
                   </div>
                 </div>
 
-                {/* Fechas de Finalización */}
+                {/* Fechas de FinalizaciÃ³n */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <DatePicker
                       id="fecha-finalizacion"
-                      label="Fecha Finalización"
+                      label="Fecha FinalizaciÃ³n"
                       placeholder="Seleccionar fecha"
                       disabled={isReadOnly}
                       defaultDate={formData.fecha_finalizacion || undefined}
@@ -2868,7 +2601,7 @@ export default function OrdenesTecnico() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="hora-termino">Hora Término</Label>
+                    <Label htmlFor="hora-termino">Hora TÃ©rmino</Label>
                     <div className="relative">
                       <Input
                         type="time"
@@ -2891,7 +2624,7 @@ export default function OrdenesTecnico() {
 
             {activeTab === "cliente" && (
               <>
-                {/* SECCIÓN 5: Firmas y Archivos */}
+                {/* SECCIÃ“N 5: Firmas y Archivos */}
                 <div className="space-y-3">
               <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-[#334155]">
                 <svg className="w-5 h-5 text-[#ff801f] dark:text-[#ffa057]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -2956,7 +2689,7 @@ export default function OrdenesTecnico() {
 
                         {/* Contenido de texto */}
                         <h4 className="mb-1 font-semibold text-gray-800 text-sm sm:text-base dark:text-white/90">
-                          {isDragActive ? "Suelta aquí para subir" : "Haz clic o arrastra imágenes (máx. 5)"}
+                          {isDragActive ? "Suelta aquÃ­ para subir" : "Haz clic o arrastra imÃ¡genes (mÃ¡x. 5)"}
                         </h4>
 
                         <span className="text-center mb-2 block w-full max-w-[320px] text-[12px] text-gray-700 dark:text-gray-400">
@@ -2993,7 +2726,7 @@ export default function OrdenesTecnico() {
                     ))}
                   </div>
                 )}
-                {/* Modal Confirmación eliminar foto (type="button" evita submit del formulario padre) */}
+                {/* Modal ConfirmaciÃ³n eliminar foto (type="button" evita submit del formulario padre) */}
                 <Modal
                   mobileBottomSheet
                   isOpen={confirmDelete.open}
@@ -3019,12 +2752,12 @@ export default function OrdenesTecnico() {
                         )}
                       </div>
                       <h5 className="mt-4 font-semibold text-gray-800 text-theme-lg dark:text-white/90">
-                        {deletingPhoto ? 'Eliminando imagen…' : 'Confirmar eliminación'}
+                        {deletingPhoto ? 'Eliminando imagenâ€¦' : 'Confirmar eliminaciÃ³n'}
                       </h5>
                       <p className="mt-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                         {deletingPhoto
                           ? 'Por favor espera; esto puede tardar unos segundos.'
-                          : 'Esta acción no se puede deshacer. ¿Eliminar la imagen seleccionada?'}
+                          : 'Esta acciÃ³n no se puede deshacer. Â¿Eliminar la imagen seleccionada?'}
                       </p>
                     </div>
                     <div className="flex justify-center gap-3 pt-2">
@@ -3052,7 +2785,7 @@ export default function OrdenesTecnico() {
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                           </svg>
                         )}
-                        {deletingPhoto ? 'Eliminando…' : 'Eliminar'}
+                        {deletingPhoto ? 'Eliminandoâ€¦' : 'Eliminar'}
                       </button>
                     </div>
                   </div>
@@ -3117,9 +2850,7 @@ export default function OrdenesTecnico() {
                 )
               )}
             </div>
-          </form>
-        </div>
-      </Modal >
+      </OrdenFormModal>
 
       {/* Modal Eliminar */}
       {
@@ -3132,10 +2863,10 @@ export default function OrdenesTecnico() {
                 </svg>
               </div>
               <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">
-                ¿Eliminar Orden?
+                Â¿Eliminar Orden?
               </h3>
               <p className="text-sm text-center text-gray-600 dark:text-gray-400 mb-6">
-                ¿Estás seguro de que deseas eliminar la orden para <span className="font-semibold">{ordenToDelete.cliente}</span>? Esta acción no se puede deshacer.
+                Â¿EstÃ¡s seguro de que deseas eliminar la orden para <span className="font-semibold">{ordenToDelete.cliente}</span>? Esta acciÃ³n no se puede deshacer.
               </p>
               <div className="flex gap-3">
                 <button
@@ -3175,10 +2906,10 @@ export default function OrdenesTecnico() {
               </div>
               <div>
                 <h5 className="text-base font-semibold text-gray-800 dark:text-gray-100">
-                  Seleccionar Ubicación
+                  Seleccionar UbicaciÃ³n
                 </h5>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                  Haz clic en el mapa para seleccionar la ubicación
+                  Haz clic en el mapa para seleccionar la ubicaciÃ³n
                 </p>
               </div>
             </div>
@@ -3194,9 +2925,9 @@ export default function OrdenesTecnico() {
 
               {/* Input manual de coordenadas */}
               <div className="space-y-2">
-                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">
+                <p className="block text-xs font-medium text-gray-600 dark:text-gray-300">
                   O ingresa las coordenadas manualmente
-                </label>
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <input
@@ -3256,12 +2987,12 @@ export default function OrdenesTecnico() {
               onClick={() => {
                 formNonceRef.current += 1;
                 if (!navigator.geolocation) {
-                  setAlert({ show: true, variant: 'warning', title: 'Geolocalización no disponible', message: 'Tu navegador no soporta geolocalización.' });
+                  setAlert({ show: true, variant: 'warning', title: 'GeolocalizaciÃ³n no disponible', message: 'Tu navegador no soporta geolocalizaciÃ³n.' });
                   setTimeout(() => setAlert(prev => ({ ...prev, show: false })), 2500);
                   return;
                 }
                 if (!window.isSecureContext) {
-                  setAlert({ show: true, variant: 'warning', title: 'Se requiere conexión segura', message: 'La geolocalización requiere HTTPS (o localhost). Abre el sistema con HTTPS o en localhost e inténtalo de nuevo.' });
+                  setAlert({ show: true, variant: 'warning', title: 'Se requiere conexiÃ³n segura', message: 'La geolocalizaciÃ³n requiere HTTPS (o localhost). Abre el sistema con HTTPS o en localhost e intÃ©ntalo de nuevo.' });
                   setTimeout(() => setAlert(prev => ({ ...prev, show: false })), 3200);
                   return;
                 }
@@ -3275,7 +3006,7 @@ export default function OrdenesTecnico() {
                     setSelectedLocation(null);
                   },
                   () => {
-                    setAlert({ show: true, variant: 'warning', title: 'No se pudo obtener ubicación', message: 'Activa permisos de ubicación e inténtalo de nuevo.' });
+                    setAlert({ show: true, variant: 'warning', title: 'No se pudo obtener ubicaciÃ³n', message: 'Activa permisos de ubicaciÃ³n e intÃ©ntalo de nuevo.' });
                     setTimeout(() => setAlert(prev => ({ ...prev, show: false })), 2500);
                   },
                   { enableHighAccuracy: true, timeout: 8000 }
@@ -3286,7 +3017,7 @@ export default function OrdenesTecnico() {
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Usar mi ubicación
+              Usar mi ubicaciÃ³n
             </button>
             <button
               type="button"
@@ -3302,7 +3033,7 @@ export default function OrdenesTecnico() {
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M5 12l4 4L19 6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Usar esta ubicación
+              Usar esta ubicaciÃ³n
             </button>
           </div>
         </div>
@@ -3319,4 +3050,5 @@ export default function OrdenesTecnico() {
     </div>
   );
 }
+
 

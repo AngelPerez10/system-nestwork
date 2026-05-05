@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import PageMeta from "@/components/common/PageMeta";
 import Alert from "@/components/ui/alert/Alert";
 import Button from "@/components/ui/button/Button";
 import { Modal } from "@/components/ui/modal";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 const cardShellClass =
   "overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-sm dark:border-white/[0.06] dark:bg-gray-900/40 dark:shadow-none";
@@ -28,7 +28,7 @@ const downloadIcon = (
   </svg>
 );
 
-/** Altura del visor: una sola vista útil (viewport menos cabecera del layout + migas + header de página). */
+/** Altura del visor: una sola vista Ãºtil (viewport menos cabecera del layout + migas + header de pÃ¡gina). */
 const viewerFrameClass =
   "min-h-[min(100dvh,520px)] w-full flex-1 border-0 sm:min-h-[560px] lg:min-h-[calc(100vh-13.5rem)] lg:max-h-[calc(100vh-13.5rem)]";
 
@@ -52,7 +52,7 @@ export default function CotizacionPdfPage() {
   const [cotizacionIdx, setCotizacionIdx] = useState<number | null>(null);
 
   const getToken = () => {
-    return localStorage.getItem("token") || sessionStorage.getItem("token");
+    return "cookie-session";
   };
 
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function CotizacionPdfPage() {
     }
 
     fetch(apiUrl(`/api/cotizaciones/${id}/`), {
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
       cache: "no-store" as RequestCache,
     })
       .then(async (res) => {
@@ -97,8 +97,8 @@ export default function CotizacionPdfPage() {
           setAlert({
             show: true,
             variant: "warning",
-            title: "Sin sesión",
-            message: "Inicia sesión para ver el PDF de la cotización.",
+            title: "Sin sesiÃ³n",
+            message: "Inicia sesiÃ³n para ver el PDF de la cotizaciÃ³n.",
           });
           setLoading(false);
         }
@@ -107,7 +107,7 @@ export default function CotizacionPdfPage() {
 
       if (!cotizacionId) {
         if (isMounted) {
-          setAlert({ show: true, variant: "error", title: "Error", message: "No se encontró el ID de la cotización." });
+          setAlert({ show: true, variant: "error", title: "Error", message: "No se encontrÃ³ el ID de la cotizaciÃ³n." });
           setLoading(false);
         }
         return;
@@ -118,7 +118,7 @@ export default function CotizacionPdfPage() {
 
         const resp = await fetch(apiUrl(`/api/cotizaciones/${cotizacionId}/pdf/`), {
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...getAuthHeaders(),
           },
         });
 
@@ -161,7 +161,7 @@ export default function CotizacionPdfPage() {
         setPdfObjectUrl(url);
       } catch {
         if (isMounted) {
-          setAlert({ show: true, variant: "error", title: "Error", message: "No se pudo cargar la información." });
+          setAlert({ show: true, variant: "error", title: "Error", message: "No se pudo cargar la informaciÃ³n." });
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -204,7 +204,7 @@ export default function CotizacionPdfPage() {
   return (
     <div className="min-h-[calc(100vh-5rem)] bg-gray-50 dark:bg-gray-950">
       <div className="mx-auto max-w-7xl space-y-5 px-3 pb-8 pt-5 text-sm sm:space-y-8 sm:px-5 sm:pb-12 sm:pt-8 sm:text-base md:px-6 lg:px-8">
-        <PageMeta title="PDF Cotización | Digitalflow" description="Vista previa y descarga del PDF de cotización" />
+        <PageMeta title="PDF CotizaciÃ³n | Digitalflow" description="Vista previa y descarga del PDF de cotizaciÃ³n" />
 
         <Modal isOpen={loading} onClose={() => {}} showCloseButton={false} className="mx-4 max-w-md sm:mx-auto">
           <div className="p-6 sm:p-8">
@@ -232,7 +232,7 @@ export default function CotizacionPdfPage() {
                     style={{ width: `${Math.min(100, Math.max(0, loadingProgress))}%` }}
                   />
                 </div>
-                <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-500">Preparando archivo…</p>
+                <p className="mt-3 text-[11px] text-gray-500 dark:text-gray-500">Preparando archivoâ€¦</p>
               </div>
             </div>
           </div>
@@ -274,7 +274,7 @@ export default function CotizacionPdfPage() {
               </svg>
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500 sm:text-[11px]">Cotización</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500 sm:text-[11px]">CotizaciÃ³n</p>
               <div className="mt-0.5 flex flex-wrap items-center gap-2 sm:mt-1">
                 <h1 className="text-lg font-semibold tracking-tight text-gray-900 dark:text-white sm:text-xl md:text-2xl">Vista PDF</h1>
                 {cotizacionIdx != null && (
@@ -284,7 +284,7 @@ export default function CotizacionPdfPage() {
                 )}
               </div>
               <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-gray-600 dark:text-gray-400 sm:mt-2 sm:text-sm">
-                Revise el documento en el panel principal y use el lateral para abrir en otra pestaña o descargar.
+                Revise el documento en el panel principal y use el lateral para abrir en otra pestaÃ±a o descargar.
               </p>
             </div>
           </div>
@@ -306,7 +306,7 @@ export default function CotizacionPdfPage() {
         </header>
 
         <div className="grid min-w-0 grid-cols-1 items-start gap-6 lg:grid-cols-12 lg:gap-8">
-          {/* Visor: prioridad máxima de altura, estilo alineado a Nueva cotización (columna principal) */}
+          {/* Visor: prioridad mÃ¡xima de altura, estilo alineado a Nueva cotizaciÃ³n (columna principal) */}
           <div className="min-w-0 lg:col-span-8">
             <div className={`flex min-h-0 flex-col ${cardShellClass} lg:min-h-[calc(100vh-13.5rem)]`}>
               <div className="border-b border-gray-100 px-4 py-3 dark:border-white/[0.06] sm:px-5 sm:py-3.5">
@@ -326,7 +326,7 @@ export default function CotizacionPdfPage() {
                     aria-busy="true"
                     aria-label="Cargando documento"
                   >
-                    <p className="text-sm text-gray-500 dark:text-gray-500">Preparando vista previa…</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-500">Preparando vista previaâ€¦</p>
                   </div>
                 ) : pdfObjectUrl ? (
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200/80 bg-white shadow-[inset_0_1px_0_0_rgba(0,0,0,0.04)] dark:border-white/[0.08] dark:bg-gray-900/30 dark:shadow-none">
@@ -344,7 +344,7 @@ export default function CotizacionPdfPage() {
                     </div>
                     <p className="text-base font-semibold text-gray-900 dark:text-white">No hay documento disponible</p>
                     <p className="mt-1.5 max-w-sm text-sm text-gray-500 dark:text-gray-400">
-                      No se pudo generar la vista previa. Compruebe la cotización o vuelva al listado.
+                      No se pudo generar la vista previa. Compruebe la cotizaciÃ³n o vuelva al listado.
                     </p>
                     <Link
                       to="/cotizacion"
@@ -358,13 +358,13 @@ export default function CotizacionPdfPage() {
             </div>
           </div>
 
-          {/* Panel lateral: acciones (misma lógica que “Resumen” en NuevaCotizacionPage) */}
+          {/* Panel lateral: acciones (misma lÃ³gica que â€œResumenâ€ en NuevaCotizacionPage) */}
           <div className="min-w-0 space-y-6 lg:col-span-4 lg:sticky lg:top-6 lg:self-start xl:top-8">
             <div className={cardShellClass}>
               <div className="border-b border-gray-100 px-4 py-4 dark:border-white/[0.06] sm:px-5">
                 <p className={sectionLabelClass}>Documento</p>
                 <h2 className="mt-1 text-base font-semibold tracking-tight text-gray-900 dark:text-white">Archivo y acciones</h2>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">Nombre sugerido al descargar y accesos rápidos.</p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 sm:text-sm">Nombre sugerido al descargar y accesos rÃ¡pidos.</p>
               </div>
               <div className="space-y-4 px-4 py-5 sm:px-5">
                 <div className="rounded-xl border border-gray-200/80 bg-gray-50/60 px-3 py-2.5 dark:border-white/[0.06] dark:bg-gray-950/35">
@@ -386,7 +386,7 @@ export default function CotizacionPdfPage() {
                     }}
                   >
                     {externalLinkIcon}
-                    <span className="hidden sm:inline">Abrir en nueva pestaña</span>
+                    <span className="hidden sm:inline">Abrir en nueva pestaÃ±a</span>
                     <span className="sm:hidden">Abrir</span>
                   </a>
 
@@ -412,7 +412,7 @@ export default function CotizacionPdfPage() {
                 </div>
 
                 <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                  Si la vista previa se ve cortada, abra el archivo en una pestaña nueva o descárguelo para verlo con su lector PDF.
+                  Si la vista previa se ve cortada, abra el archivo en una pestaÃ±a nueva o descÃ¡rguelo para verlo con su lector PDF.
                 </p>
               </div>
             </div>
@@ -422,3 +422,5 @@ export default function CotizacionPdfPage() {
     </div>
   );
 }
+
+

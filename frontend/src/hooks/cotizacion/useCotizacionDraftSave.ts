@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 type AlertPayload = {
   show: boolean;
@@ -77,16 +77,13 @@ export function useCotizacionDraftSave<TPayload>(params: Params<TPayload>) {
       }
     }
 
-    const token = params.getToken();
-    if (!token) return null;
-
     try {
       if (autosave) setIsAutoSaving(true);
       const isEdit = !!targetId;
       const res = await fetch(apiUrl(isEdit ? `/api/cotizaciones/${targetId}/` : "/api/cotizaciones/"), {
         method: isEdit ? "PUT" : "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify(params.buildPayload()),
@@ -144,13 +141,12 @@ export function useCotizacionDraftSave<TPayload>(params: Params<TPayload>) {
   useEffect(() => {
     const onBeforeUnload = () => {
       const targetId = (params.editingCotizacionId || params.activeCotizacionId || "").trim();
-      const token = params.getToken();
-      if (!targetId || !token) return;
+      if (!targetId) return;
       try {
         void fetch(apiUrl(`/api/cotizaciones/${targetId}/`), {
           method: "PUT",
           headers: {
-            Authorization: `Bearer ${token}`,
+            ...getAuthHeaders(),
             "Content-Type": "application/json",
           },
           body: JSON.stringify(params.buildPayload()),

@@ -15,6 +15,9 @@ if not ALLOWED_HOSTS or ALLOWED_HOSTS == ["localhost", "127.0.0.1"]:
 
 SHOW_PUBLIC_IF_NO_TENANT_FOUND = False
 
+# Hard-stop stubs in production unless there is an explicit temporary override.
+ENABLE_OPS_STUBS = env.bool("ENABLE_OPS_STUBS", default=False)
+
 # HTTPS / cookies — see https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

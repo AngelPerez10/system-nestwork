@@ -10,12 +10,11 @@ import {
   PageIcon,
   PieChartIcon,
   PlugInIcon,
-  TableIcon,
   UserCircleIcon,
 } from "@/icons";
 import { useSidebar } from "@/context/SidebarContext";
 import { useAuth } from "@/context/AuthContext";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 let appSidebarPermissionsInFlight: Promise<any> | null = null;
 let appSidebarPermissionsLastFetchAt = 0;
@@ -83,7 +82,7 @@ const AppSidebar: React.FC = () => {
         appSidebarPermissionsInFlight = (async () => {
           const res = await fetch(apiUrl('/api/me/permissions/'), {
             method: 'GET',
-            headers: { Authorization: `Bearer ${authPermissions ? 'Bearer' : ''}` },
+            headers: { ...getAuthHeaders() },
             cache: 'no-store' as RequestCache,
           });
           const data = await res.json().catch(() => null);
@@ -169,18 +168,6 @@ const AppSidebar: React.FC = () => {
         });
       }
 
-      if (SIDEBAR_FUTURE.comprasYGastos) {
-        items.push({
-          icon: <TableIcon />,
-          name: "Compras Y Gastos",
-          subItems: [
-            { name: "Proveedores", path: "/", pro: false },
-            { name: "Orden De compra", path: "/orden-compra", pro: false },
-            { name: "Gasto", path: "/gasto", pro: false },
-          ],
-        });
-      }
-
       if (permissions?.cotizaciones?.view !== false) {
         items.push({
           icon: <PieChartIcon />,
@@ -202,18 +189,8 @@ const AppSidebar: React.FC = () => {
           ...(SIDEBAR_FUTURE.operacionExtended
             ? ([
                 { name: "Levantamiento", path: "/levantamiento", pro: false },
-                { name: "Instalación", path: "/instalacion", pro: false },
-                { name: "Mantenimiento", path: "/mantenimiento", pro: false },
-                { name: "Órdenes del Tecnico", path: "/mantenimiento", pro: false },
+                { name: "Órdenes del Tecnico", path: "/ordenes-tecnico", pro: false },
                 { name: "Reportes", path: "/reportes", pro: false },
-                { name: "Tiket", path: "/tiket", pro: false },
-                { name: "Vehículo", path: "/vehiculo", pro: false },
-                { name: "Técnico", path: "/tecnico", pro: false },
-                { name: "Rastreo", path: "/rastreo", pro: false },
-                { name: "Servicios", path: "/servicios", pro: false },
-                { name: "Pólizas", path: "/polizas", pro: false },
-                { name: "Garantías", path: "/garantias", pro: false },
-                { name: "Reparaciones", path: "/reparaciones", pro: false },
               ] as const)
             : []),
         ],

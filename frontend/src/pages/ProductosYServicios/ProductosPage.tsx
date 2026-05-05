@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDropzone } from "react-dropzone";
 
@@ -6,7 +6,7 @@ import PageMeta from "@/components/common/PageMeta";
 import ComponentCard from "@/components/common/ComponentCard";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 const cardShellClass =
   "overflow-hidden rounded-3xl border border-[#e7ded0] bg-[#fffdfa]/95 shadow-[0_30px_80px_-40px_rgba(28,25,23,0.28)] backdrop-blur-sm dark:border-[#273244] dark:bg-[#111827]/80 dark:shadow-[0_30px_80px_-45px_rgba(0,0,0,0.55)]";
@@ -60,7 +60,7 @@ type SyscomProductoDetalle = SyscomProducto & {
   imagenes?: (string | { url?: string; imagen?: string; src?: string })[];
 };
 
-const getAuthToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+const MANUAL_PRODUCTS_STORAGE_KEY = "manual_products_v1";
 
 const asNumber = (v: unknown): number | null => {
   if (v === null || v === undefined) return null;
@@ -77,7 +77,7 @@ const formatPrecioPublicoMxnConIva = (p: SyscomProducto, _tipoCambio: number | n
   if (precioLista !== null) {
     return precioLista.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
   }
-  return "—";
+  return "â€”";
 };
 
 const getProductoImageUrl = (imgPortada?: string) => {
@@ -116,6 +116,39 @@ type ManualProduct = {
   fuente: "manual";
   precio: number;
   stock: number;
+};
+
+const loadManualProductsFromStorage = (): ManualProduct[] => {
+  try {
+    const raw = localStorage.getItem(MANUAL_PRODUCTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x): x is ManualProduct => Boolean(x) && typeof x === "object")
+      .map((x) => ({
+        id: String(x.id || ""),
+        imagen_url: String(x.imagen_url || ""),
+        producto: String(x.producto || ""),
+        caracteristicas: String(x.caracteristicas || ""),
+        marca: String(x.marca || ""),
+        modelo: String(x.modelo || ""),
+        fuente: "manual",
+        precio: Number.isFinite(Number(x.precio)) ? Number(x.precio) : 0,
+        stock: Number.isFinite(Number(x.stock)) ? Number(x.stock) : 0,
+      }))
+      .filter((x) => x.id && x.producto.trim());
+  } catch {
+    return [];
+  }
+};
+
+const persistManualProductsToStorage = (items: ManualProduct[]) => {
+  try {
+    localStorage.setItem(MANUAL_PRODUCTS_STORAGE_KEY, JSON.stringify(items));
+  } catch {
+    // ignore
+  }
 };
 
 const MANUAL_PRODUCTS_IMAGE_FOLDER = "productos/manuales";
@@ -288,39 +321,7 @@ export default function ProductosPage() {
   });
 
   const fetchManualProducts = useCallback(async () => {
-    const token = getAuthToken();
-    if (!token) return;
-    try {
-      const res = await fetch(apiUrl("/api/productos-manuales/?page_size=500&ordering=-fecha_creacion"), {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data: unknown = await res.json().catch(() => ({ results: [] }));
-      if (!res.ok) return;
-      const apiData = data as { results?: unknown } | unknown[];
-      const list = Array.isArray((apiData as { results?: unknown })?.results)
-        ? ((apiData as { results?: unknown[] }).results ?? [])
-        : Array.isArray(apiData)
-          ? apiData
-          : [];
-      const mapped: ManualProduct[] = list
-        .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
-        .map((x): ManualProduct => ({
-          id: String(x.id ?? ""),
-          imagen_url: String(x.imagen_url ?? ""),
-          producto: String(x.producto ?? ""),
-          caracteristicas: String(x.caracteristicas ?? ""),
-          marca: String(x.marca ?? ""),
-          modelo: String(x.modelo ?? ""),
-          fuente: "manual",
-          precio: toMoney2(Number(x.precio ?? 0)),
-          stock: Number.isFinite(Number(x.stock)) ? Number(x.stock) : 0,
-        }))
-        .filter((x: ManualProduct) => x.producto.trim());
-      setManualProducts(mapped);
-    } catch {
-      // ignore
-    }
+    setManualProducts(loadManualProductsFromStorage());
   }, []);
 
   useEffect(() => {
@@ -330,12 +331,11 @@ export default function ProductosPage() {
   const deleteCloudinaryByUrl = useCallback(async (url: string) => {
     const publicId = getPublicIdFromUrl(url);
     if (!publicId) return;
-    const token = getAuthToken();
     await fetch(apiUrl("/api/ordenes/delete-image/"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({ public_id: publicId }),
     });
@@ -348,12 +348,11 @@ export default function ProductosPage() {
     setManualImageUploading(true);
     try {
       const compressed = await compressImage(file, 50, 1400, 1400);
-      const token = getAuthToken();
       const resp = await fetch(apiUrl("/api/ordenes/upload-image/"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ data_url: compressed, folder: MANUAL_PRODUCTS_IMAGE_FOLDER }),
       });
@@ -540,11 +539,6 @@ export default function ProductosPage() {
       setManualFormError("Stock inválido.");
       return;
     }
-    const token = getAuthToken();
-    if (!token) {
-      setManualFormError("Debes iniciar sesión para guardar productos.");
-      return;
-    }
     const body = {
       imagen_url: manualForm.imagen_url.trim(),
       producto,
@@ -556,25 +550,23 @@ export default function ProductosPage() {
       activo: true,
     };
     try {
-      const isEdit = Boolean(editingManualId);
-      const endpoint = isEdit
-        ? apiUrl(`/api/productos-manuales/${editingManualId}/`)
-        : apiUrl("/api/productos-manuales/");
-      const res = await fetch(endpoint, {
-        method: isEdit ? "PATCH" : "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detail = (data as { detail?: unknown })?.detail;
-        setManualFormError(typeof detail === "string" && detail.trim() ? detail : "No se pudo guardar el producto.");
-        return;
-      }
-      await fetchManualProducts();
+      const nextList = (() => {
+        if (editingManualId) {
+          return manualProducts.map((p) =>
+            p.id === editingManualId ? { ...p, ...body, id: editingManualId, fuente: "manual" as const } : p
+          );
+        }
+        return [
+          {
+            ...body,
+            id: `manual_${Date.now()}`,
+            fuente: "manual" as const,
+          },
+          ...manualProducts,
+        ];
+      })();
+      persistManualProductsToStorage(nextList);
+      setManualProducts(nextList);
       setManualModalOpen(false);
     } catch {
       setManualFormError("Error de conexión al guardar producto manual.");
@@ -583,16 +575,10 @@ export default function ProductosPage() {
 
   const confirmDeleteManual = async () => {
     if (!manualDeleteId) return;
-    const token = getAuthToken();
-    if (!token) return;
     try {
-      const res = await fetch(apiUrl(`/api/productos-manuales/${manualDeleteId}/`), {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
-      await fetchManualProducts();
-      setManualProducts((prev) => prev.filter((x) => x.id !== manualDeleteId));
+      const next = manualProducts.filter((x) => x.id !== manualDeleteId);
+      persistManualProductsToStorage(next);
+      setManualProducts(next);
       setManualDeleteId(null);
     } catch {
       // ignore
@@ -794,7 +780,7 @@ export default function ProductosPage() {
                         {getProductoImageUrl(p.img_portada) ? (
                           <img src={getProductoImageUrl(p.img_portada)!} alt="" className="w-full h-full object-contain" loading="lazy" />
                         ) : (
-                          <span className="text-[10px] text-gray-400">—</span>
+                          <span className="text-[10px] text-gray-400">â€”</span>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -890,7 +876,7 @@ export default function ProductosPage() {
                                   {imgUrl ? (
                                     <img src={imgUrl} alt="" className="w-full h-full object-contain" loading="lazy" />
                                   ) : (
-                                    <span className="text-[10px] text-gray-400">—</span>
+                                    <span className="text-[10px] text-gray-400">â€”</span>
                                   )}
                                 </div>
                               </TableCell>
@@ -906,11 +892,11 @@ export default function ProductosPage() {
                               </TableCell>
                               <TableCell className="px-3 py-2 w-[100px] whitespace-nowrap">{p.marca}</TableCell>
                               <TableCell className="px-3 py-2 w-[120px] whitespace-nowrap">{p.modelo}</TableCell>
-                              <TableCell className="px-3 py-2 w-[90px] whitespace-nowrap capitalize">{p.fuente || "—"}</TableCell>
+                              <TableCell className="px-3 py-2 w-[90px] whitespace-nowrap capitalize">{p.fuente || "â€”"}</TableCell>
                               <TableCell className="px-3 py-2 w-[120px] whitespace-nowrap font-medium text-[#ff801f] dark:text-[#ffa057] tabular-nums">
                                 {formatPrecioPublicoMxnConIva(p, tipoCambio)}
                               </TableCell>
-                              <TableCell className="px-3 py-2 w-[80px] whitespace-nowrap">{p.total_existencia ?? "—"}</TableCell>
+                              <TableCell className="px-3 py-2 w-[80px] whitespace-nowrap">{p.total_existencia ?? "â€”"}</TableCell>
                               <TableCell className="px-3 py-2 text-center w-[100px]">
                                 {p.fuente === "manual" ? (
                                   <div className="inline-flex items-center gap-1 rounded-md bg-gray-100 dark:bg-white/10 px-1.5 py-1">
@@ -1126,7 +1112,7 @@ export default function ProductosPage() {
                     </svg>
                     Stock
                   </dt>
-                  <dd className="text-sm text-gray-900 dark:text-white">{detailProduct.total_existencia ?? "—"}</dd>
+                  <dd className="text-sm text-gray-900 dark:text-white">{detailProduct.total_existencia ?? "â€”"}</dd>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <dt className="flex items-center gap-1.5 text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -1135,7 +1121,7 @@ export default function ProductosPage() {
                     </svg>
                     Modelo
                   </dt>
-                  <dd className="text-sm text-gray-900 dark:text-white">{detailProduct.modelo || "—"}</dd>
+                  <dd className="text-sm text-gray-900 dark:text-white">{detailProduct.modelo || "â€”"}</dd>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <dt className="flex items-center gap-1.5 text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -1144,7 +1130,7 @@ export default function ProductosPage() {
                     </svg>
                     Marca
                   </dt>
-                  <dd className="text-sm text-gray-900 dark:text-white">{detailProduct.marca || "—"}</dd>
+                  <dd className="text-sm text-gray-900 dark:text-white">{detailProduct.marca || "â€”"}</dd>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <dt className="flex items-center gap-1.5 text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -1153,7 +1139,7 @@ export default function ProductosPage() {
                     </svg>
                     Fuente
                   </dt>
-                  <dd className="text-sm text-gray-900 dark:text-white capitalize">{detailProduct.fuente || "—"}</dd>
+                  <dd className="text-sm text-gray-900 dark:text-white capitalize">{detailProduct.fuente || "â€”"}</dd>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <dt className="flex items-center gap-1.5 text-sm font-medium text-gray-500 dark:text-gray-400">
@@ -1162,7 +1148,7 @@ export default function ProductosPage() {
                     </svg>
                     SKU
                   </dt>
-                  <dd className="text-sm text-gray-900 dark:text-white">{detailProduct.sku || detailProduct.modelo || "—"}</dd>
+                  <dd className="text-sm text-gray-900 dark:text-white">{detailProduct.sku || detailProduct.modelo || "â€”"}</dd>
                 </div>
                 {detailProduct.estado && (
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -1450,3 +1436,4 @@ export default function ProductosPage() {
     </>
   );
 }
+

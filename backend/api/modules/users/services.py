@@ -138,6 +138,9 @@ def visible_users_queryset(*, requesting_user, include_superusers: bool = False)
     if is_platform_superadmin(requesting_user):
         return qs
 
+    if schema == "public":
+        return qs.none()
+
     if schema != "public":
         qs = qs.filter(
             id__in=OrganizationUser.objects.filter(

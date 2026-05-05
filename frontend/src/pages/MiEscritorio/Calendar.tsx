@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
@@ -6,7 +6,7 @@ import interactionPlugin from "@fullcalendar/interaction";
 import { EventInput } from "@fullcalendar/core";
 import esLocale from "@fullcalendar/core/locales/es";
 import PageMeta from "@/components/common/PageMeta";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 let calendarOrdenesInFlight: Promise<void> | null = null;
 
@@ -33,9 +33,7 @@ const getToken = (): string => {
   return (
     localStorage.getItem("auth_token") ||
     sessionStorage.getItem("auth_token") ||
-    localStorage.getItem("token") ||
-    sessionStorage.getItem("token") ||
-    ""
+    "cookie-session"
   ).trim();
 };
 
@@ -100,7 +98,7 @@ const Calendar: React.FC = () => {
         calendarOrdenesInFlight = (async () => {
           const res = await fetch(apiUrl("/api/ordenes/"), {
             headers: {
-              Authorization: `Bearer ${token}`,
+              ...getAuthHeaders(),
               "Content-Type": "application/json",
             },
           });
@@ -149,7 +147,7 @@ const Calendar: React.FC = () => {
     <>
       <PageMeta
         title="Agenda | System NestWork"
-        description="Vista de calendario con órdenes de trabajo por fecha."
+        description="Vista de calendario con Ã³rdenes de trabajo por fecha."
       />
 
       <div className="sn-calendar-shell space-y-6">
@@ -169,11 +167,11 @@ const Calendar: React.FC = () => {
                 today: "Hoy",
                 month: "Mes",
                 week: "Semana",
-                day: "Día",
+                day: "DÃ­a",
                 list: "Lista",
               }}
-              allDayText="Todo el día"
-              moreLinkText={(n) => `+${n} más`}
+              allDayText="Todo el dÃ­a"
+              moreLinkText={(n) => `+${n} mÃ¡s`}
               dayMaxEvents={3}
               noEventsText="No hay eventos para mostrar"
               events={events}
@@ -187,3 +185,5 @@ const Calendar: React.FC = () => {
 };
 
 export default Calendar;
+
+

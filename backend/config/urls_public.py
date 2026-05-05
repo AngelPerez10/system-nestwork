@@ -7,6 +7,6 @@ from api import views
 
 urlpatterns = [
     path("api/health/", views.health_public, name="api-health-public"),
-    path("api/", include("api.urls")),
+    path("api/", include("api.modules.onboarding.urls")),
     path("api/", include("api.modules.superadmin.urls")),
 ]

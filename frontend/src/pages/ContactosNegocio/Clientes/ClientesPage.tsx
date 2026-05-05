@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
 
 import PageMeta from "@/components/common/PageMeta";
 import { Link } from "react-router-dom";
@@ -6,7 +6,7 @@ import ComponentCard from "@/components/common/ComponentCard";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
 import Alert from "@/components/ui/alert/Alert";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { PencilIcon, TrashBinIcon } from "@/icons";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
@@ -309,9 +309,6 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
   }, [fixedTipo]);
 
   const estadosOptions = estadosPorPais[formData.pais || "México"] || estadosPorPais["México"] || [];
-  const getToken = () => {
-    return localStorage.getItem("token") || sessionStorage.getItem("token");
-  };
 
   useEffect(() => {
     if (!showMapModal) {
@@ -429,8 +426,6 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
   }, []);
 
   useEffect(() => {
-    const token = getToken();
-    if (!token) return;
     const now = Date.now();
     if (now - clientesPagePermissionsLastFetchAt < CLIENTES_PAGE_PERMS_TTL_MS) return;
 
@@ -453,7 +448,7 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
         clientesPagePermissionsInFlight = (async () => {
           const res = await fetch(apiUrl('/api/me/permissions/'), {
             method: 'GET',
-            headers: { Authorization: `Bearer ${token}` },
+            headers: { ...getAuthHeaders() },
             cache: 'no-store' as RequestCache,
           });
           const data = await res.json().catch(() => null);
@@ -481,11 +476,6 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
   }, []);
 
   const fetchClientes = async (page = 1, search = "") => {
-    const token = getToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     const requestSeq = ++clientesRequestSeqRef.current;
     try {
@@ -496,7 +486,7 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
       });
       if (fixedTipo) query.set('tipo', fixedTipo);
       const res = await fetch(apiUrl(`/api/clientes/?${query.toString()}`), {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
         cache: 'no-store' as RequestCache,
       });
       const data = await res.json().catch(() => ({ results: [], count: 0 }));
@@ -572,11 +562,6 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
       return;
     }
 
-    const token = getToken();
-    if (!token) {
-      setModalError("Sesión inválida. Inicia sesión de nuevo.");
-      return;
-    }
     const url = editingCliente ? apiUrl(`/api/clientes/${editingCliente.id}/`) : apiUrl('/api/clientes/');
     const method = editingCliente ? 'PUT' : 'POST';
     const clienteNombre = formData.nombre;
@@ -586,7 +571,7 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
       const response = await fetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(buildClientePayload(formData, fixedTipo)),
@@ -675,16 +660,10 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
 
   const handleConfirmDelete = async () => {
     if (!clienteToDelete) return;
-    const token = getToken();
-    if (!token) {
-      setAlert({ show: true, variant: "error", title: "Sesión inválida", message: "Inicia sesión nuevamente." });
-      setTimeout(() => setAlert(prev => ({ ...prev, show: false })), 3000);
-      return;
-    }
     try {
       const response = await fetch(apiUrl(`/api/clientes/${clienteToDelete.id}/`), {
         method: "DELETE",
-        headers: { "Authorization": `Bearer ${token}` }
+        headers: { ...getAuthHeaders() }
       });
       if (response.status === 401 || response.status === 403) {
         setAlert({
@@ -990,7 +969,7 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
                 <input
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder={`Buscar ${viewPlural.toLowerCase()}…`}
+                  placeholder={`Buscar ${viewPlural.toLowerCase()}...`}
                   className={searchInputClass}
                 />
                 {searchTerm && (
@@ -1663,3 +1642,5 @@ const ClientesPage = ({ fixedTipo }: ClientesPageProps) => {
 };
 
 export default ClientesPage;
+
+

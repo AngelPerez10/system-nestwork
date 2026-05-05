@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+﻿import { useState, useEffect, useMemo, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { Modal } from "@/components/ui/modal";
 import Alert from "@/components/ui/alert/Alert";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import DatePicker from "@/components/form/date-picker";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import ActionSearchBar from "@/components/kokonutui/action-search-bar";
 import LevantamientoForm from "./LevantamientoForm";
 import SignaturePad from "@/components/ui/signature/SignaturePad";
@@ -35,7 +35,7 @@ export interface OrdenServicioModalProps {
   forceTipoOrden?: "levantamiento";
   onSaved: (savedOrden: any) => void;
   getToken: () => string | null;
-  /** Nueva orden: fecha de inicio sugerida (YYYY-MM-DD). Si no se envía, se usa hoy. */
+  /** Nueva orden: fecha de inicio sugerida (YYYY-MM-DD). Si no se envÃ­a, se usa hoy. */
   defaultFechaInicioForNewOrden?: string;
   /** Texto del mes seleccionado en el listado (solo informativo en el formulario de levantamiento). */
   levantamientoListadoMonthLabel?: string;
@@ -517,7 +517,7 @@ export default function OrdenServicioModal({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ data_url: compressed, folder: "ordenes/fotos" }),
         });
@@ -587,7 +587,7 @@ export default function OrdenServicioModal({
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ public_id: publicId }),
         });
@@ -597,7 +597,7 @@ export default function OrdenServicioModal({
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...getAuthHeaders(),
           },
           body: JSON.stringify({ fotos_urls: updated }),
         });
@@ -728,7 +728,7 @@ export default function OrdenServicioModal({
     const missing: string[] = [];
     if (!formData.cliente_id && !(formData.cliente && formData.cliente.trim())) missing.push("Cliente");
     if (!(formData.direccion && formData.direccion.trim()) && !(formData.telefono_cliente && formData.telefono_cliente.trim()))
-      missing.push("Dirección o Teléfono");
+      missing.push("DirecciÃ³n o TelÃ©fono");
     if (!Array.isArray(formData.servicios_realizados) || formData.servicios_realizados.length === 0) missing.push("Servicios realizados");
     if (!(formData.fecha_inicio && formData.fecha_inicio.trim())) missing.push("Fecha de inicio");
     return { ok: missing.length === 0, missing };
@@ -780,7 +780,7 @@ export default function OrdenServicioModal({
 
       const response = await fetch(url, {
         method,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
@@ -810,7 +810,7 @@ export default function OrdenServicioModal({
         if (Object.keys(updates).length > 0) {
           await fetch(apiUrl(`/api/clientes/${cid}/`), {
             method: "PATCH",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
             body: JSON.stringify(updates),
           }).catch(() => null);
         }
@@ -830,7 +830,7 @@ export default function OrdenServicioModal({
           if (Object.keys(body).length > 0) {
             const res = await fetch(apiUrl(`/api/cliente-contactos/${contactoIdToUpdate}/`), {
               method: "PATCH",
-              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+              headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
               body: JSON.stringify(body),
             }).catch(() => null);
             if (res?.ok) contactUpdated = true;
@@ -845,14 +845,14 @@ export default function OrdenServicioModal({
             if (Object.keys(body).length > 0) {
               await fetch(apiUrl(`/api/cliente-contactos/${target.id}/`), {
                 method: "PATCH",
-                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
                 body: JSON.stringify(body),
               }).catch(() => null);
             }
           } else if (nombre || celular) {
             await fetch(apiUrl("/api/cliente-contactos/"), {
               method: "POST",
-              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+              headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
               body: JSON.stringify({
                 cliente: cid,
                 nombre_apellido: nombre || (existingCliente?.nombre || ""),
@@ -871,7 +871,7 @@ export default function OrdenServicioModal({
         const snap = levantamientoSnapshotRef.current;
         await fetch(apiUrl(`/api/ordenes/${savedOrden.id}/levantamiento/`), {
           method: "PUT",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
           body: JSON.stringify({ payload: snap.payload || {}, dibujo_url: snap.dibujo_url || "" }),
         }).catch(() => null);
 
@@ -904,7 +904,7 @@ export default function OrdenServicioModal({
             const sanitizeThumbnailUrl = (raw: unknown): string => {
               const s = typeof raw === "string" ? raw.trim() : "";
               if (!s) return "";
-              // Django URLField rechaza URLs con espacios, así que las normalizamos.
+              // Django URLField rechaza URLs con espacios, asÃ­ que las normalizamos.
               const candidate = s.replace(/\s+/g, "%20");
               try {
                 const u = new URL(candidate);
@@ -921,7 +921,7 @@ export default function OrdenServicioModal({
               cliente: clienteNombre,
               prospecto: !cid,
               contacto: contactoNombre,
-              // DRF valida `choices` del campo; si no tenemos info, mandamos un valor válido.
+              // DRF valida `choices` del campo; si no tenemos info, mandamos un valor vÃ¡lido.
               medio_contacto: 'OTRO',
               status: 'PENDIENTE',
               fecha: todayIso,
@@ -930,7 +930,7 @@ export default function OrdenServicioModal({
               iva_pct: ivaPct,
               iva,
               total,
-              texto_arriba_precios: 'A continuación cotización solicitada:',
+              texto_arriba_precios: 'A continuaciÃ³n cotizaciÃ³n solicitada:',
               terminos: '',
               items: cercoItems.map((it: any, index: number) => ({
                 producto_externo_id: String(it.producto_externo_id || ''),
@@ -948,14 +948,14 @@ export default function OrdenServicioModal({
             const cotRes = await fetch(apiUrl('/api/cotizaciones/'), {
               method: 'POST',
               headers: {
-                Authorization: `Bearer ${token}`,
+                ...getAuthHeaders(),
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify(cotPayload),
             }).catch(() => null as any);
 
             if (cotRes && cotRes.ok) {
-              // Para que la UI de `CotizacionesPage` se refresque al crear desde otro módulo.
+              // Para que la UI de `CotizacionesPage` se refresque al crear desde otro mÃ³dulo.
               window.dispatchEvent(new Event('cotizaciones:updated'));
             }
 
@@ -967,21 +967,21 @@ export default function OrdenServicioModal({
               } catch {
                 details = await cotRes.text().catch(() => "");
               }
-              console.error("Error creando cotización desde levantamiento:", details, cotPayload);
+              console.error("Error creando cotizaciÃ³n desde levantamiento:", details, cotPayload);
               setModalAlert({
                 show: true,
                 variant: "warning",
                 title: "Orden guardada",
                 message: details
-                  ? `La orden se guardó, pero la cotización no se pudo crear. Detalle: ${details}`
-                  : "La orden se guardó, pero la cotización no se pudo crear.",
+                  ? `La orden se guardÃ³, pero la cotizaciÃ³n no se pudo crear. Detalle: ${details}`
+                  : "La orden se guardÃ³, pero la cotizaciÃ³n no se pudo crear.",
               });
               window.setTimeout(() => setModalAlert((p) => ({ ...p, show: false })), 6000);
             }
           }
         } catch (e) {
-          // No bloquear el guardado de la orden si falla la cotización
-          console.error('Error creando cotización desde levantamiento:', e);
+          // No bloquear el guardado de la orden si falla la cotizaciÃ³n
+          console.error('Error creando cotizaciÃ³n desde levantamiento:', e);
         }
       }
 
@@ -1068,7 +1068,7 @@ export default function OrdenServicioModal({
 
           {activeTab === "cliente" && (
             <>
-              {/* SECCIÓN 1: Detalles Generales */}
+              {/* SECCIÃ“N 1: Detalles Generales */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1133,8 +1133,8 @@ export default function OrdenServicioModal({
                         <ActionSearchBar
                           actions={quienInstaloActions as any}
                           defaultOpen={false}
-                          label="Técnico Asignado"
-                          placeholder="Buscar técnico..."
+                          label="TÃ©cnico Asignado"
+                          placeholder="Buscar tÃ©cnico..."
                           value={
                             tecnicoSearch ||
                             (formData.tecnico_asignado
@@ -1157,7 +1157,7 @@ export default function OrdenServicioModal({
                         <button
                           type="button"
                           onClick={() => selectTecnico(null)}
-                          aria-label="Limpiar selección"
+                          aria-label="Limpiar selecciÃ³n"
                           className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition mt-[20px]"
                         >
                           <svg
@@ -1183,8 +1183,8 @@ export default function OrdenServicioModal({
                         <ActionSearchBar
                           actions={quienEntregoActions as any}
                           defaultOpen={false}
-                          label="¿Quien instaló?"
-                          placeholder="Buscar técnico..."
+                          label="Â¿Quien instalÃ³?"
+                          placeholder="Buscar tÃ©cnico..."
                           value={quienInstaloSearch || (formData.quien_instalo ? (() => {
                             const tecnicoId = Number(formData.quien_instalo);
                             const u = usuarios.find((u) => u.id === tecnicoId);
@@ -1202,7 +1202,7 @@ export default function OrdenServicioModal({
                         <button
                           type="button"
                           onClick={() => selectQuienInstalo(null)}
-                          aria-label="Limpiar selección"
+                          aria-label="Limpiar selecciÃ³n"
                           className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition mt-[20px]"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -1217,8 +1217,8 @@ export default function OrdenServicioModal({
                         <ActionSearchBar
                           actions={tecnicoActions as any}
                           defaultOpen={false}
-                          label="¿Quien entregó?"
-                          placeholder="Buscar técnico..."
+                          label="Â¿Quien entregÃ³?"
+                          placeholder="Buscar tÃ©cnico..."
                           value={quienEntregoSearch || (formData.quien_entrego ? (() => {
                             const tecnicoId = Number(formData.quien_entrego);
                             const u = usuarios.find((u) => u.id === tecnicoId);
@@ -1236,7 +1236,7 @@ export default function OrdenServicioModal({
                         <button
                           type="button"
                           onClick={() => selectQuienEntrego(null)}
-                          aria-label="Limpiar selección"
+                          aria-label="Limpiar selecciÃ³n"
                           className="shrink-0 h-10 w-10 inline-flex items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-600 shadow-theme-xs hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition mt-[20px]"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
@@ -1250,7 +1250,7 @@ export default function OrdenServicioModal({
                 </div>
               </div>
 
-              {/* SECCIÓN: Detalles del Cliente (dirección y teléfono) */}
+              {/* SECCIÃ“N: Detalles del Cliente (direcciÃ³n y telÃ©fono) */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1260,10 +1260,10 @@ export default function OrdenServicioModal({
                   <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Detalles del Cliente</h4>
                 </div>
                 <div className="rounded-xl border border-gray-200 dark:border-white/10 p-4 bg-white dark:bg-gray-900/40 shadow-theme-xs space-y-4">
-                  {/* Dirección con botones (igual que OrdenesPage) */}
+                  {/* DirecciÃ³n con botones (igual que OrdenesPage) */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">Dirección</label>
+                      <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">DirecciÃ³n</label>
                       <button
                         type="button"
                         onClick={() => setShowMapModal(true)}
@@ -1285,7 +1285,7 @@ export default function OrdenServicioModal({
                         onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
                         rows={2}
                         className="w-full rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-3 py-2 pr-12 shadow-theme-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:border-brand-500 focus:ring-2 focus:ring-brand-200/70 dark:focus:border-brand-400 dark:focus:ring-brand-900/40 outline-none resize-none"
-                        placeholder="Dirección, coordenadas o URL de Google Maps"
+                        placeholder="DirecciÃ³n, coordenadas o URL de Google Maps"
                       />
                       {formData.direccion && (
                         <button
@@ -1317,19 +1317,19 @@ export default function OrdenServicioModal({
                     </div>
                   </div>
                   <div>
-                    <Label>Teléfono</Label>
+                    <Label>TelÃ©fono</Label>
                     <Input
                       type="tel"
                       value={formData.telefono_cliente}
                       onChange={(e) => setFormData({ ...formData, telefono_cliente: e.target.value.replace(/\D/g, "") })}
-                      placeholder="Teléfono"
+                      placeholder="TelÃ©fono"
                       className="w-full"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* SECCIÓN: Tiempos de la orden */}
+              {/* SECCIÃ“N: Tiempos de la orden */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1368,12 +1368,12 @@ export default function OrdenServicioModal({
                     </div>
                   </div>
 
-                  {/* Fechas de Finalización (igual que OrdenesPage) */}
+                  {/* Fechas de FinalizaciÃ³n (igual que OrdenesPage) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <DatePicker
                         id="modal-fecha-finalizacion"
-                        label="Fecha Finalización"
+                        label="Fecha FinalizaciÃ³n"
                         placeholder="Seleccionar fecha"
                         defaultDate={formData.fecha_finalizacion || undefined}
                         onChange={(_dates, currentDateString) => {
@@ -1382,7 +1382,7 @@ export default function OrdenServicioModal({
                       />
                     </div>
                     <div>
-                      <Label htmlFor="modal-hora-termino">Hora Término</Label>
+                      <Label htmlFor="modal-hora-termino">Hora TÃ©rmino</Label>
                       <div className="relative">
                         <Input
                           type="time"
@@ -1400,17 +1400,17 @@ export default function OrdenServicioModal({
                 </div>
               </div>
 
-              {/* SECCIÓN: Descripción de la Orden */}
+              {/* SECCIÃ“N: DescripciÃ³n de la Orden */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Descripción de la Orden</h4>
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">DescripciÃ³n de la Orden</h4>
                 </div>
                 <div className="rounded-xl border border-gray-200 dark:border-white/10 p-4 bg-white dark:bg-gray-900/40 shadow-theme-xs space-y-4">
                   <div>
-                    <Label>Problemática</Label>
+                    <Label>ProblemÃ¡tica</Label>
                     <textarea
                       value={formData.problematica}
                       onChange={(e) => setFormData({ ...formData, problematica: e.target.value })}
@@ -1458,7 +1458,7 @@ export default function OrdenServicioModal({
                             }
                             className="hover:text-brand-900"
                           >
-                            ×
+                            Ã—
                           </button>
                         </span>
                       ))}
@@ -1478,7 +1478,7 @@ export default function OrdenServicioModal({
                     </select>
                   </div>
                   <div>
-                    <Label>Comentario del Técnico</Label>
+                    <Label>Comentario del TÃ©cnico</Label>
                     <textarea
                       value={formData.comentario_tecnico}
                       onChange={(e) => setFormData({ ...formData, comentario_tecnico: e.target.value })}
@@ -1490,7 +1490,7 @@ export default function OrdenServicioModal({
                 </div>
               </div>
 
-              {/* SECCIÓN 3: Firmas y Archivos */}
+              {/* SECCIÃ“N 3: Firmas y Archivos */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1552,7 +1552,7 @@ export default function OrdenServicioModal({
 
                         {/* Contenido de texto */}
                         <h4 className="mb-1 font-semibold text-gray-800 text-sm sm:text-base dark:text-white/90">
-                          {isDragActive ? "Suelta aquí para subir" : "Haz clic o arrastra imágenes (máx. 5)"}
+                          {isDragActive ? "Suelta aquÃ­ para subir" : "Haz clic o arrastra imÃ¡genes (mÃ¡x. 5)"}
                         </h4>
 
                         <span className="text-center mb-2 block w-full max-w-[320px] text-[12px] text-gray-700 dark:text-gray-400">
@@ -1595,7 +1595,7 @@ export default function OrdenServicioModal({
                     </div>
                   )}
 
-                  {/* Modal Confirmación eliminar foto (type="button" evita submit del formulario padre) */}
+                  {/* Modal ConfirmaciÃ³n eliminar foto (type="button" evita submit del formulario padre) */}
                   <Modal
                     isOpen={confirmDelete.open}
                     onClose={() => {
@@ -1625,12 +1625,12 @@ export default function OrdenServicioModal({
                           )}
                         </div>
                         <h5 className="mt-4 font-semibold text-gray-800 text-theme-lg dark:text-white/90">
-                          {deletingPhoto ? "Eliminando imagen…" : "Confirmar eliminación"}
+                          {deletingPhoto ? "Eliminando imagenâ€¦" : "Confirmar eliminaciÃ³n"}
                         </h5>
                         <p className="mt-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                           {deletingPhoto
                             ? "Por favor espera; esto puede tardar unos segundos."
-                            : "Esta acción no se puede deshacer. ¿Eliminar la imagen seleccionada?"}
+                            : "Esta acciÃ³n no se puede deshacer. Â¿Eliminar la imagen seleccionada?"}
                         </p>
                       </div>
                       <div className="flex justify-center gap-3 pt-2">
@@ -1658,7 +1658,7 @@ export default function OrdenServicioModal({
                               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                             </svg>
                           )}
-                          {deletingPhoto ? "Eliminando…" : "Eliminar"}
+                          {deletingPhoto ? "Eliminandoâ€¦" : "Eliminar"}
                         </button>
                       </div>
                     </div>
@@ -1741,7 +1741,7 @@ export default function OrdenServicioModal({
       </div>
     </Modal>
 
-      {/* Modal Mapa Interactivo (igual que OrdenesPage; id de contenedor único) */}
+      {/* Modal Mapa Interactivo (igual que OrdenesPage; id de contenedor Ãºnico) */}
       <Modal
         isOpen={showMapModal}
         onClose={() => setShowMapModal(false)}
@@ -1761,8 +1761,8 @@ export default function OrdenServicioModal({
                 </svg>
               </div>
               <div>
-                <h5 className="text-base font-semibold text-gray-800 dark:text-gray-100">Seleccionar Ubicación</h5>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">Haz clic en el mapa para seleccionar la ubicación</p>
+                <h5 className="text-base font-semibold text-gray-800 dark:text-gray-100">Seleccionar UbicaciÃ³n</h5>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Haz clic en el mapa para seleccionar la ubicaciÃ³n</p>
               </div>
             </div>
           </div>
@@ -1837,8 +1837,8 @@ export default function OrdenServicioModal({
                   setModalAlert({
                     show: true,
                     variant: "warning",
-                    title: "Geolocalización no disponible",
-                    message: "Tu navegador no soporta geolocalización.",
+                    title: "GeolocalizaciÃ³n no disponible",
+                    message: "Tu navegador no soporta geolocalizaciÃ³n.",
                   });
                   setTimeout(() => setModalAlert((p) => ({ ...p, show: false })), 2500);
                   return;
@@ -1847,9 +1847,9 @@ export default function OrdenServicioModal({
                   setModalAlert({
                     show: true,
                     variant: "warning",
-                    title: "Se requiere conexión segura",
+                    title: "Se requiere conexiÃ³n segura",
                     message:
-                      "La geolocalización requiere HTTPS (o localhost). Abre el sistema con HTTPS o en localhost e inténtalo de nuevo.",
+                      "La geolocalizaciÃ³n requiere HTTPS (o localhost). Abre el sistema con HTTPS o en localhost e intÃ©ntalo de nuevo.",
                   });
                   setTimeout(() => setModalAlert((p) => ({ ...p, show: false })), 3200);
                   return;
@@ -1867,8 +1867,8 @@ export default function OrdenServicioModal({
                     setModalAlert({
                       show: true,
                       variant: "warning",
-                      title: "No se pudo obtener ubicación",
-                      message: "Activa permisos de ubicación e inténtalo de nuevo.",
+                      title: "No se pudo obtener ubicaciÃ³n",
+                      message: "Activa permisos de ubicaciÃ³n e intÃ©ntalo de nuevo.",
                     });
                     setTimeout(() => setModalAlert((p) => ({ ...p, show: false })), 2500);
                   },
@@ -1880,7 +1880,7 @@ export default function OrdenServicioModal({
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Usar mi ubicación
+              Usar mi ubicaciÃ³n
             </button>
             <button
               type="button"
@@ -1896,7 +1896,7 @@ export default function OrdenServicioModal({
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <path d="M5 12l4 4L19 6" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              Usar esta ubicación
+              Usar esta ubicaciÃ³n
             </button>
           </div>
         </div>

@@ -3,6 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from api.modules.users.services import tenant_schema_name
 from MiEscritorio.services.tareas_service import (
     can_access_tarea,
     can_tareas,
@@ -13,9 +14,19 @@ from MiEscritorio.services.tareas_service import (
 from MiEscritorio.tareas.models import Tarea
 
 
+def _reject_public_schema():
+    if tenant_schema_name() == "public":
+        return Response({"detail": "No encontrado"}, status=404)
+    return None
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def tareas_collection(request):
+    public_guard = _reject_public_schema()
+    if public_guard:
+        return public_guard
+
     if request.method == "GET":
         if not can_tareas(request.user, "view"):
             return Response({"detail": "No autorizado"}, status=403)
@@ -44,6 +55,10 @@ def tareas_collection(request):
 @api_view(["PUT", "PATCH", "DELETE"])
 @permission_classes([IsAuthenticated])
 def tarea_detail(request, tarea_id: int):
+    public_guard = _reject_public_schema()
+    if public_guard:
+        return public_guard
+
     try:
         tarea = visible_tareas_queryset(request.user).get(pk=tarea_id)
     except Tarea.DoesNotExist:
@@ -90,6 +105,10 @@ def tarea_detail(request, tarea_id: int):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def tareas_upload_image(request):
+    public_guard = _reject_public_schema()
+    if public_guard:
+        return public_guard
+
     if not (can_tareas(request.user, "create") or can_tareas(request.user, "edit")):
         return Response({"detail": "No autorizado"}, status=403)
     data = request.data if isinstance(request.data, dict) else {}
@@ -102,4 +121,8 @@ def tareas_upload_image(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def tareas_delete_image(_request):
+    public_guard = _reject_public_schema()
+    if public_guard:
+        return public_guard
+
     return Response(status=status.HTTP_204_NO_CONTENT)

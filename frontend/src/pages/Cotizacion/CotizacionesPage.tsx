@@ -251,7 +251,7 @@ export default function CotizacionesPage() {
       <PageMeta title="Cotizaciones | Sistema Grupo Intrax GPS" description="Gestión de cotizaciones" />
 
       {!canCotizacionesView ? (
-        <div className={`rounded-2xl border border-[#e7ded0] bg-[#fffdfa] px-4 py-10 text-center text-xs text-[#7a6b5b] shadow-sm dark:border-white/[0.06] dark:bg-gray-900/40 dark:text-gray-400 sm:text-sm`}>
+        <div className={`mt-16 rounded-2xl border border-[#e7ded0] bg-[#fffdfa] px-4 py-10 text-center text-xs text-[#7a6b5b] shadow-sm dark:border-white/[0.06] dark:bg-gray-900/40 dark:text-gray-400 sm:mt-20 sm:text-sm`}>
           No tienes permiso para ver Cotizaciones.
         </div>
       ) : (

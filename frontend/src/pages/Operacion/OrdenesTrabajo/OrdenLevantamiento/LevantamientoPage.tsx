@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+﻿import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import PageMeta from "@/components/common/PageMeta";
 import ComponentCard from "@/components/common/ComponentCard";
@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components
 import { Modal } from "@/components/ui/modal";
 import Alert from "@/components/ui/alert/Alert";
 import DatePicker from "@/components/form/date-picker";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { formatMonthLabelEs, getCurrentMonthKey } from "@/utils/statsMonthKey";
 import { PencilIcon, TrashBinIcon } from "@/icons";
 import { MobileOrderList } from "../OrdenServicio/MobileOrderCard";
@@ -97,7 +97,7 @@ export default function LevantamientoPage() {
     message: "",
   });
 
-  const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token");
+  const getToken = () => "cookie-session";
   const normalizeStatus = (value: unknown) => String(value ?? "").trim().toLowerCase();
 
   const formatYmdToDMY = (ymd: string | null | undefined) => {
@@ -119,18 +119,18 @@ export default function LevantamientoPage() {
         const token = getToken();
         if (!token) {
           setOrdenes([]);
-          setAlert({ show: true, variant: "warning", title: "Sin sesión", message: "No se encontró token. Inicia sesión nuevamente." });
+          setAlert({ show: true, variant: "warning", title: "Sin sesiÃ³n", message: "No se encontrÃ³ token. Inicia sesiÃ³n nuevamente." });
           setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 3000);
           return;
         }
         const res = await fetch(apiUrl("/api/ordenes/"), {
           method: "GET",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) {
           setOrdenes([]);
-          setAlert({ show: true, variant: "error", title: "Error", message: "No se pudieron cargar las órdenes." });
+          setAlert({ show: true, variant: "error", title: "Error", message: "No se pudieron cargar las Ã³rdenes." });
           setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 3500);
           return;
         }
@@ -220,7 +220,7 @@ export default function LevantamientoPage() {
 
     const byCliente: Record<string, { cliente: string; services: number }> = {};
     for (const o of monthList) {
-      const name = (o.cliente || o.nombre_cliente || "—").toString().trim() || "—";
+      const name = (o.cliente || o.nombre_cliente || "â€”").toString().trim() || "â€”";
       const key = (o.cliente_id != null ? String(o.cliente_id) : name) || name;
       const services = Array.isArray(o.servicios_realizados) ? o.servicios_realizados.length : 0;
       if (!byCliente[key]) byCliente[key] = { cliente: name, services: 0 };
@@ -237,7 +237,7 @@ export default function LevantamientoPage() {
       total,
       resueltas,
       pendientes,
-      estrella: best?.cliente || "—",
+      estrella: best?.cliente || "â€”",
       estrellaServices: best?.services || 0,
     };
   }, [levantamientos, statsMonthKey]);
@@ -300,7 +300,7 @@ export default function LevantamientoPage() {
     try {
       const res = await fetch(apiUrl(`/api/ordenes/?_ts=${Date.now()}`), {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         cache: "no-store" as RequestCache,
       });
       const data = await res.json().catch(() => null);
@@ -319,7 +319,7 @@ export default function LevantamientoPage() {
   return (
     <div className="min-h-[calc(100vh-5rem)] bg-gray-50 dark:bg-gray-950">
     <div className="mx-auto w-full max-w-[min(100%,1920px)] space-y-5 px-3 pb-10 pt-5 text-sm sm:space-y-6 sm:px-5 sm:pb-12 sm:pt-6 sm:text-base md:px-6 lg:px-8 xl:px-10 2xl:max-w-[min(100%,2200px)]">
-      <PageMeta title="Levantamiento" description="Órdenes de levantamiento" />
+      <PageMeta title="Levantamiento" description="Ã“rdenes de levantamiento" />
       <nav
         className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-gray-500 dark:text-gray-500 sm:text-[13px]"
         aria-label="Migas de pan"
@@ -344,11 +344,11 @@ export default function LevantamientoPage() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500 sm:text-[11px]">
-              Operación
+              OperaciÃ³n
             </p>
             <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-gray-900 dark:text-white sm:text-xl md:text-2xl">Levantamiento</h1>
             <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-gray-600 dark:text-gray-400 sm:mt-2 sm:text-sm">
-              Listado de órdenes tipo levantamiento. Abre el PDF, revisa el detalle o crea una nueva orden desde el modal.
+              Listado de Ã³rdenes tipo levantamiento. Abre el PDF, revisa el detalle o crea una nueva orden desde el modal.
             </p>
           </div>
         </div>
@@ -420,14 +420,14 @@ export default function LevantamientoPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por folio, cliente, teléfono…"
+            placeholder="Buscar por folio, cliente, telÃ©fonoâ€¦"
             className={searchInputClass}
           />
           {search && (
             <button
               type="button"
               onClick={() => setSearch("")}
-              aria-label="Limpiar búsqueda"
+              aria-label="Limpiar bÃºsqueda"
               className="absolute inset-y-0 right-0 my-1 mr-1 inline-flex h-8 min-w-[40px] items-center justify-center rounded-md text-gray-400 hover:bg-gray-200/60 hover:text-gray-600 dark:hover:bg-white/[0.06] sm:h-9 sm:min-w-[44px] sm:rounded-lg"
             >
               <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
@@ -454,7 +454,7 @@ export default function LevantamientoPage() {
       <ComponentCard
         compact
         title="Listado"
-        desc="Resultados según búsqueda y filtros. En pantallas pequeñas usa el listado compacto."
+        desc="Resultados segÃºn bÃºsqueda y filtros. En pantallas pequeÃ±as usa el listado compacto."
         className={`overflow-visible ${cardShellClass}`}
         actions={
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2">
@@ -497,7 +497,7 @@ export default function LevantamientoPage() {
                       className="h-10 w-full rounded-lg border border-gray-200/90 bg-gray-50/90 px-3 text-sm text-gray-800 outline-none focus:border-brand-500/80 focus:bg-white focus:ring-2 focus:ring-brand-500/20 dark:border-white/[0.08] dark:bg-gray-950/40 dark:text-gray-200 dark:focus:bg-gray-900/60"
                     >
                       <option value="">Todos</option>
-                      <option value="camara">Cámara</option>
+                      <option value="camara">CÃ¡mara</option>
                       <option value="cerco">Cerco</option>
                       <option value="alarmas">Alarmas</option>
                     </select>
@@ -563,7 +563,7 @@ export default function LevantamientoPage() {
                   <TableCell isHeader className="px-2 py-2 text-left w-2/5 min-w-[220px] whitespace-nowrap text-gray-700 dark:text-gray-300">Cliente</TableCell>
                   <TableCell isHeader className="px-2 py-2 text-left w-1/5 min-w-[220px] text-gray-700 dark:text-gray-300">Detalles</TableCell>
                   <TableCell isHeader className="px-2 py-2 text-left w-[130px] min-w-[130px] whitespace-nowrap text-gray-700 dark:text-gray-300">Fechas</TableCell>
-                  <TableCell isHeader className="px-2 py-2 text-left w-[160px] min-w-[160px] whitespace-nowrap text-gray-700 dark:text-gray-300">Técnico</TableCell>
+                  <TableCell isHeader className="px-2 py-2 text-left w-[160px] min-w-[160px] whitespace-nowrap text-gray-700 dark:text-gray-300">TÃ©cnico</TableCell>
                   <TableCell isHeader className="px-2 py-2 text-center w-[110px] min-w-[110px] whitespace-nowrap text-gray-700 dark:text-gray-300">Estado</TableCell>
                   <TableCell isHeader className="px-2 py-2 text-center w-[120px] min-w-[120px] whitespace-nowrap text-gray-700 dark:text-gray-300">Acciones</TableCell>
                 </TableRow>
@@ -579,7 +579,7 @@ export default function LevantamientoPage() {
                 {!loading && filteredLevantamientos.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={7} className="px-2 py-3">
-                      Sin órdenes de levantamiento.
+                      Sin Ã³rdenes de levantamiento.
                     </TableCell>
                   </TableRow>
                 )}
@@ -618,12 +618,12 @@ export default function LevantamientoPage() {
                               type="button"
                               onClick={() => setProblematicaModal({ open: true, content: orden.problematica || "-" })}
                               className="inline-flex items-center gap-1 text-[11px] sm:text-[12px] text-blue-600 hover:underline dark:text-blue-400"
-                              title="Ver problemática"
+                              title="Ver problemÃ¡tica"
                             >
                               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
-                              Problemática
+                              ProblemÃ¡tica
                             </button>
                             <button
                               type="button"
@@ -660,7 +660,7 @@ export default function LevantamientoPage() {
                               type="button"
                               onClick={() => setComentarioModal({ open: true, content: (orden.comentario_tecnico || "") as string })}
                               className="inline-flex items-center gap-1 text-[12px] text-blue-600 hover:underline dark:text-blue-400"
-                              title="Ver comentario del técnico"
+                              title="Ver comentario del tÃ©cnico"
                             >
                               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" />
@@ -789,7 +789,7 @@ export default function LevantamientoPage() {
                 </svg>
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Problemática</h3>
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">ProblemÃ¡tica</h3>
                 <p className="text-[11px] text-gray-500 dark:text-gray-400">Detalle completo reportado por el cliente</p>
               </div>
             </div>
@@ -852,8 +852,8 @@ export default function LevantamientoPage() {
                 </svg>
               </span>
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Comentario del Técnico</h3>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">Observaciones y notas del técnico</p>
+                <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Comentario del TÃ©cnico</h3>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">Observaciones y notas del tÃ©cnico</p>
               </div>
             </div>
           </div>
@@ -875,7 +875,7 @@ export default function LevantamientoPage() {
         forceTipoOrden="levantamiento"
         defaultFechaInicioForNewOrden={selectedMonth === getCurrentMonthKey() ? undefined : `${selectedMonth}-01`}
         levantamientoListadoMonthLabel={formatMonthLabelEs(selectedMonth)}
-        onSaved={() => { fetchOrdenes(); setShowOrderModal(false); setEditingOrdenForModal(null); setAlert({ show: true, variant: "success", title: "Orden guardada", message: "La orden se guardó correctamente." }); setTimeout(() => setAlert((p) => ({ ...p, show: false })), 2500); }}
+        onSaved={() => { fetchOrdenes(); setShowOrderModal(false); setEditingOrdenForModal(null); setAlert({ show: true, variant: "success", title: "Orden guardada", message: "La orden se guardÃ³ correctamente." }); setTimeout(() => setAlert((p) => ({ ...p, show: false })), 2500); }}
         getToken={getToken}
       />
 
@@ -887,9 +887,9 @@ export default function LevantamientoPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">¿Eliminar Orden?</h3>
+            <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">Â¿Eliminar Orden?</h3>
             <p className="text-sm text-center text-gray-600 dark:text-gray-400 mb-6">
-              ¿Estás seguro de que deseas eliminar la orden para <span className="font-semibold">{ordenToDelete.cliente}</span>? Esta acción no se puede deshacer.
+              Â¿EstÃ¡s seguro de que deseas eliminar la orden para <span className="font-semibold">{ordenToDelete.cliente}</span>? Esta acciÃ³n no se puede deshacer.
             </p>
             <div className="flex gap-3">
               <button onClick={handleCancelDelete} className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
@@ -906,3 +906,5 @@ export default function LevantamientoPage() {
     </div>
   );
 }
+
+

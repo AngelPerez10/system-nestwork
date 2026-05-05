@@ -1,11 +1,11 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+﻿import { useState, useEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "@/components/common/PageMeta";
 import ComponentCard from "@/components/common/ComponentCard";
 import { Modal } from "@/components/ui/modal";
 import Alert from "@/components/ui/alert/Alert";
 import { useDropzone } from "react-dropzone";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { PencilIcon, TrashBinIcon } from "../../icons";
 import { MobileTareaList } from "./MobileTareaCard";
 import { draggable, dropTargetForElements, monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -105,7 +105,7 @@ export default function TareasPage() {
     };
 
     const getToken = () => {
-        return localStorage.getItem("token") || sessionStorage.getItem("token");
+        return "cookie-session";
     };
 
     const [permissions, setPermissions] = useState<any>(() => getPermissionsFromStorage());
@@ -183,8 +183,6 @@ export default function TareasPage() {
     }, []);
 
     useEffect(() => {
-        const token = getToken();
-        if (!token) return;
         const now = Date.now();
         if (now - tareasPagePermissionsLastFetchAt < TAREAS_PAGE_PERMS_TTL_MS) return;
 
@@ -207,7 +205,7 @@ export default function TareasPage() {
                 tareasPagePermissionsInFlight = (async () => {
                     const res = await fetch(apiUrl('/api/me/permissions/'), {
                         method: 'GET',
-                        headers: { Authorization: `Bearer ${token}` },
+                        headers: { ...getAuthHeaders() },
                         cache: 'no-store' as RequestCache,
                     });
                     const data = await res.json().catch(() => null);
@@ -399,7 +397,7 @@ export default function TareasPage() {
             tareasPageUsuariosInFlight = (async () => {
                 const response = await fetch(apiUrl("/api/users/accounts/"), {
                     headers: {
-                        "Authorization": `Bearer ${token}`,
+                        ...getAuthHeaders(),
                         "Content-Type": "application/json"
                     }
                 });
@@ -442,7 +440,7 @@ export default function TareasPage() {
             tareasPageTareasInFlight = (async () => {
                 const response = await fetch(apiUrl("/api/tareas/"), {
                     headers: {
-                        "Authorization": `Bearer ${token}`,
+                        ...getAuthHeaders(),
                         "Content-Type": "application/json"
                     }
                 });
@@ -496,8 +494,6 @@ export default function TareasPage() {
             setTimeout(() => setModalAlert(prev => ({ ...prev, show: false })), 3500);
             return;
         }
-        const token = getToken();
-
         const { ok, missing } = validateForm();
         if (!ok) {
             setModalAlert({
@@ -523,7 +519,7 @@ export default function TareasPage() {
             const response = await fetch(url, {
                 method,
                 headers: {
-                    Authorization: `Bearer ${token}`,
+                    ...getAuthHeaders(),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(payload),
@@ -774,7 +770,7 @@ export default function TareasPage() {
         const response = await fetch(apiUrl(`/api/tareas/${id}/`), {
             method: "PATCH",
             headers: {
-                Authorization: `Bearer ${token}`,
+                ...getAuthHeaders(),
                 "Content-Type": "application/json",
             },
             body: JSON.stringify(patch),
@@ -1704,3 +1700,5 @@ export default function TareasPage() {
         </>
     );
 }
+
+

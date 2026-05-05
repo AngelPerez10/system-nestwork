@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import PageMeta from "@/components/common/PageMeta";
 import ComponentCard from "@/components/common/ComponentCard";
 import Alert from "@/components/ui/alert/Alert";
 import { Modal } from "@/components/ui/modal";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { TrashBinIcon } from "@/icons";
 import DatePicker from "@/components/form/date-picker";
 
@@ -40,7 +40,7 @@ type ReporteSemanal = {
   fecha_creacion: string;
 };
 
-const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+const getToken = () => "cookie-session";
 
 const getPermissionsFromStorage = () => {
   try {
@@ -100,7 +100,7 @@ const toLocalDateTime = (value?: string | null) => {
   return d.toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" });
 };
 
-/** Cuenta órdenes por estado (backend: pendiente | resuelto). */
+/** Cuenta Ã³rdenes por estado (backend: pendiente | resuelto). */
 const countOrdenesResueltasPendientes = (ordenes: OrdenResumen[] | undefined) => {
   let resueltas = 0;
   let pendientes = 0;
@@ -140,15 +140,15 @@ function parseFilenameFromContentDisposition(header: string | null): string | nu
 }
 
 const formatSemanaLabel = (desde: string, hasta: string) => {
-  if (!desde || !hasta) return "—";
+  if (!desde || !hasta) return "â€”";
   try {
     const a = new Date(`${desde}T12:00:00`);
     const b = new Date(`${hasta}T12:00:00`);
-    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return `${desde} → ${hasta}`;
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return `${desde} â†’ ${hasta}`;
     const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
-    return `${a.toLocaleDateString("es-MX", opts)} – ${b.toLocaleDateString("es-MX", opts)}`;
+    return `${a.toLocaleDateString("es-MX", opts)} â€“ ${b.toLocaleDateString("es-MX", opts)}`;
   } catch {
-    return `${desde} → ${hasta}`;
+    return `${desde} â†’ ${hasta}`;
   }
 };
 
@@ -288,17 +288,17 @@ export default function ReportesPage() {
     const desdeIso = isAdmin ? adminRangoDesde : weekFrom;
     const hastaIso = isAdmin ? adminRangoHasta : weekTo;
     if (!desdeIso || !hastaIso) {
-      setError(isAdmin ? "Selecciona fecha de inicio y fecha final." : "Selecciona un rango de semana válido.");
+      setError(isAdmin ? "Selecciona fecha de inicio y fecha final." : "Selecciona un rango de semana vÃ¡lido.");
       return;
     }
     const from = new Date(`${desdeIso}T00:00:00`);
     const to = new Date(`${hastaIso}T00:00:00`);
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to) {
-      setError("El rango de fechas no es válido.");
+      setError("El rango de fechas no es vÃ¡lido.");
       return;
     }
     if (isAdmin && (adminTecnicoId == null || Number.isNaN(adminTecnicoId))) {
-      setError("Selecciona un técnico.");
+      setError("Selecciona un tÃ©cnico.");
       return;
     }
     setSaving(true);
@@ -311,7 +311,7 @@ export default function ReportesPage() {
       const res = await fetch(apiUrl("/api/ordenes/reportes-semanales/"), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),
@@ -451,7 +451,7 @@ export default function ReportesPage() {
     return (
       <div className="min-h-[calc(100vh-5rem)] bg-gray-50 dark:bg-gray-950">
       <div className="mx-auto w-full max-w-[min(100%,1920px)] space-y-5 px-3 pb-10 pt-5 text-sm sm:space-y-6 sm:px-5 sm:pb-12 sm:pt-6 sm:text-base md:px-6 lg:px-8 xl:px-10 2xl:max-w-[min(100%,2200px)]">
-        <PageMeta title="Reportes semanales" description="Reportes de técnicos por semana" />
+        <PageMeta title="Reportes semanales" description="Reportes de tÃ©cnicos por semana" />
         <nav className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-gray-500 dark:text-gray-500 sm:text-[13px]" aria-label="Migas de pan">
           <Link to="/" className="rounded-md px-1 py-0.5 transition-colors hover:bg-gray-200/60 hover:text-gray-800 dark:hover:bg-white/5 dark:hover:text-gray-200">
             Inicio
@@ -464,7 +464,7 @@ export default function ReportesPage() {
         <Alert
           variant="error"
           title="Sin acceso"
-          message="No tienes permiso para ver reportes semanales. Un administrador puede habilitarlo en Usuarios → Permisos (Reportes semanales → Ver)."
+          message="No tienes permiso para ver reportes semanales. Un administrador puede habilitarlo en Usuarios â†’ Permisos (Reportes semanales â†’ Ver)."
         />
       </div>
       </div>
@@ -474,7 +474,7 @@ export default function ReportesPage() {
   return (
     <div className="min-h-[calc(100vh-5rem)] bg-gray-50 dark:bg-gray-950">
     <div className="mx-auto w-full max-w-[min(100%,1920px)] space-y-5 px-3 pb-10 pt-5 text-sm sm:space-y-6 sm:px-5 sm:pb-12 sm:pt-6 sm:text-base md:px-6 lg:px-8 xl:px-10 2xl:max-w-[min(100%,2200px)]">
-      <PageMeta title="Reportes semanales" description="Reportes de técnicos por semana" />
+      <PageMeta title="Reportes semanales" description="Reportes de tÃ©cnicos por semana" />
       <nav
         className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-gray-500 dark:text-gray-500 sm:text-[13px]"
         aria-label="Migas de pan"
@@ -502,11 +502,11 @@ export default function ReportesPage() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-400 dark:text-gray-500 sm:text-[11px]">
-              Operación
+              OperaciÃ³n
             </p>
             <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-gray-900 dark:text-white sm:text-xl md:text-2xl">Reportes semanales</h1>
             <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-gray-600 dark:text-gray-400 sm:mt-2 sm:text-sm">
-              Historial por técnico y semana (lunes a sábado). Genera PDF, crea nuevos cortes y revisa órdenes incluidas.
+              Historial por tÃ©cnico y semana (lunes a sÃ¡bado). Genera PDF, crea nuevos cortes y revisa Ã³rdenes incluidas.
             </p>
           </div>
         </div>
@@ -536,7 +536,7 @@ export default function ReportesPage() {
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500 sm:text-[10px]">Órdenes reportadas</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500 sm:text-[10px]">Ã“rdenes reportadas</p>
               <p className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white sm:text-lg">{totalOrdenes}</p>
             </div>
           </div>
@@ -550,7 +550,7 @@ export default function ReportesPage() {
               </svg>
             </span>
             <div className="min-w-0">
-              <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500 sm:text-[10px]">Técnicos con reporte</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-500 sm:text-[10px]">TÃ©cnicos con reporte</p>
               <p className="mt-0.5 text-base font-semibold tabular-nums text-gray-900 dark:text-white sm:text-lg">{totalTecnicos}</p>
             </div>
           </div>
@@ -565,14 +565,14 @@ export default function ReportesPage() {
           <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por técnico, semana, folio, cliente…"
+            placeholder="Buscar por tÃ©cnico, semana, folio, clienteâ€¦"
             className={searchInputClass}
           />
           {searchTerm && (
             <button
               type="button"
               onClick={() => setSearchTerm("")}
-              aria-label="Limpiar búsqueda"
+              aria-label="Limpiar bÃºsqueda"
               className="absolute inset-y-0 right-0 my-1 mr-1 inline-flex h-8 min-w-[40px] items-center justify-center rounded-md text-gray-400 hover:bg-gray-200/60 hover:text-gray-600 dark:hover:bg-white/[0.06] sm:h-9 sm:min-w-[44px] sm:rounded-lg"
             >
               <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor">
@@ -602,7 +602,7 @@ export default function ReportesPage() {
       <ComponentCard
         compact
         title="Listado"
-        desc="Reportes guardados y filtrados por tu búsqueda. En móvil verás tarjetas; en escritorio, tabla."
+        desc="Reportes guardados y filtrados por tu bÃºsqueda. En mÃ³vil verÃ¡s tarjetas; en escritorio, tabla."
         className={`overflow-hidden ${cardShellClass}`}
       >
         <div className="space-y-4 p-2 pt-0">
@@ -620,7 +620,7 @@ export default function ReportesPage() {
                     </span>
                     <div>
                       <p className="text-sm font-medium text-gray-800 dark:text-gray-100">Crear reporte semanal</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Corte semanal de lunes a sábado.</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Corte semanal de lunes a sÃ¡bado.</p>
                     </div>
                   </div>
                   <div className="w-full min-w-0 lg:ml-auto lg:max-w-2xl">
@@ -692,7 +692,7 @@ export default function ReportesPage() {
           )}
 
           <div className="overflow-hidden rounded-xl border border-gray-200/80 bg-gray-50/40 dark:border-white/[0.06] dark:bg-gray-950/30">
-            {/* Vista móvil / tablet: tarjetas */}
+            {/* Vista mÃ³vil / tablet: tarjetas */}
             <div className="lg:hidden divide-y divide-gray-100 dark:divide-white/10">
               {loading && (
                 <div className="px-4 py-10 text-center text-sm text-gray-500">Cargando reportes...</div>
@@ -707,7 +707,7 @@ export default function ReportesPage() {
                     <div key={r.id} className="p-4 sm:p-5">
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="min-w-0 space-y-1">
-                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{r.tecnico_nombre || "—"}</p>
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{r.tecnico_nombre || "â€”"}</p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">
                             {formatSemanaLabel(r.semana_inicio, r.semana_fin)}
                           </p>
@@ -761,7 +761,7 @@ export default function ReportesPage() {
                 <TableHeader className="sticky top-0 z-10 border-b border-gray-100 bg-gray-50/95 text-[11px] font-semibold uppercase tracking-wide text-gray-600 dark:border-white/[0.06] dark:bg-gray-900/80 dark:text-gray-300">
                   <TableRow className="hover:bg-transparent">
                     <TableCell isHeader className="px-4 py-3 text-left whitespace-nowrap">
-                      Técnico
+                      TÃ©cnico
                     </TableCell>
                     <TableCell isHeader className="px-4 py-3 text-left whitespace-nowrap">
                       Semana
@@ -770,10 +770,10 @@ export default function ReportesPage() {
                       Creado
                     </TableCell>
                     <TableCell isHeader className="px-4 py-3 text-center whitespace-nowrap">
-                      Órdenes resueltas
+                      Ã“rdenes resueltas
                     </TableCell>
                     <TableCell isHeader className="px-4 py-3 text-center whitespace-nowrap">
-                      Órdenes pendientes
+                      Ã“rdenes pendientes
                     </TableCell>
                     <TableCell isHeader className="px-4 py-3 text-center whitespace-nowrap w-[120px]">
                       Acciones
@@ -801,7 +801,7 @@ export default function ReportesPage() {
                       return (
                         <TableRow key={r.id} className="hover:bg-gray-50/90 dark:hover:bg-gray-800/50 transition-colors">
                           <TableCell className="px-4 py-3 align-middle">
-                            <span className="font-medium text-gray-900 dark:text-white">{r.tecnico_nombre || "—"}</span>
+                            <span className="font-medium text-gray-900 dark:text-white">{r.tecnico_nombre || "â€”"}</span>
                           </TableCell>
                           <TableCell className="px-4 py-3 align-middle text-gray-600 dark:text-gray-300">
                             {formatSemanaLabel(r.semana_inicio, r.semana_fin)}
@@ -871,7 +871,7 @@ export default function ReportesPage() {
           className="w-[94vw] max-w-2xl max-h-[92vh] p-0 overflow-hidden mx-4 sm:mx-auto"
         >
           <div>
-            {/* Header — mismo patrón que OrdenesPage */}
+            {/* Header â€” mismo patrÃ³n que OrdenesPage */}
             <div className="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-white/10">
               <div className="flex items-center gap-4">
                 <span className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-brand-50 dark:bg-brand-500/10">
@@ -886,7 +886,7 @@ export default function ReportesPage() {
                 <div className="min-w-0">
                   <h5 className="text-base font-semibold text-gray-800 dark:text-gray-100">Nuevo reporte semanal</h5>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                    Selecciona el técnico y revisa el rango (lunes a sábado) antes de guardar
+                    Selecciona el tÃ©cnico y revisa el rango (lunes a sÃ¡bado) antes de guardar
                   </p>
                 </div>
               </div>
@@ -894,19 +894,19 @@ export default function ReportesPage() {
 
             {/* Body */}
             <div className="p-4 sm:p-5 space-y-5 max-h-[min(72vh,560px)] overflow-y-auto custom-scrollbar">
-              {/* Sección: Técnico */}
+              {/* SecciÃ³n: TÃ©cnico */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0z" strokeLinecap="round" strokeLinejoin="round" />
                     <path d="M12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Técnico del reporte</h4>
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-100">TÃ©cnico del reporte</h4>
                 </div>
                 <div className="rounded-xl border border-gray-200 dark:border-white/10 p-4 bg-white dark:bg-gray-900/40 shadow-theme-xs space-y-3">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1" htmlFor="reporte-tecnico-select-modal">
-                      Selecciona el técnico
+                      Selecciona el tÃ©cnico
                     </label>
                     <select
                       id="reporte-tecnico-select-modal"
@@ -929,7 +929,7 @@ export default function ReportesPage() {
                 </div>
               </div>
 
-              {/* Sección: Rango de fechas (admin: cualquier rango con el mismo calendario que órdenes) */}
+              {/* SecciÃ³n: Rango de fechas (admin: cualquier rango con el mismo calendario que Ã³rdenes) */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                   <svg className="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -939,7 +939,7 @@ export default function ReportesPage() {
                 </div>
                 <div className="rounded-xl border border-gray-200 dark:border-white/10 p-4 bg-white dark:bg-gray-900/40 shadow-theme-xs">
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    Como administrador puedes elegir cualquier periodo. Se incluyen órdenes cuya fecha de inicio esté entre ambas fechas.
+                    Como administrador puedes elegir cualquier periodo. Se incluyen Ã³rdenes cuya fecha de inicio estÃ© entre ambas fechas.
                   </p>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <DatePicker
@@ -961,7 +961,7 @@ export default function ReportesPage() {
               </div>
             </div>
 
-            {/* Footer — mismo estilo que botones del modal de órdenes */}
+            {/* Footer â€” mismo estilo que botones del modal de Ã³rdenes */}
             <div className="px-4 sm:px-6 py-4 border-t border-gray-200 dark:border-white/10 flex flex-col sm:flex-row justify-end gap-2">
               <button
                 type="button"
@@ -1008,10 +1008,10 @@ export default function ReportesPage() {
             <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full bg-brand-100 dark:bg-brand-900/30">
               <PdfDocGlyph className="w-7 h-7 text-brand-600 dark:text-brand-400" />
             </div>
-            <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">¿Descargar PDF?</h3>
+            <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">Â¿Descargar PDF?</h3>
             <p className="text-sm text-center text-gray-600 dark:text-gray-400 mb-6">
-              Se generará el reporte en PDF de{" "}
-              <span className="font-semibold text-gray-800 dark:text-gray-200">{reportePdfModal.tecnico_nombre || "—"}</span>{" "}
+              Se generarÃ¡ el reporte en PDF de{" "}
+              <span className="font-semibold text-gray-800 dark:text-gray-200">{reportePdfModal.tecnico_nombre || "â€”"}</span>{" "}
               para la semana del{" "}
               <span className="font-semibold text-gray-800 dark:text-gray-200">
                 {formatSemanaLabel(reportePdfModal.semana_inicio, reportePdfModal.semana_fin)}
@@ -1056,11 +1056,11 @@ export default function ReportesPage() {
                 />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">¿Eliminar reporte?</h3>
+            <h3 className="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">Â¿Eliminar reporte?</h3>
             <p className="text-sm text-center text-gray-600 dark:text-gray-400 mb-6">
-              ¿Estás seguro de que deseas eliminar el reporte de{" "}
-              <span className="font-semibold">{reporteDeleteModal.tecnico_nombre || "—"}</span> (
-              {formatSemanaLabel(reporteDeleteModal.semana_inicio, reporteDeleteModal.semana_fin)})? Esta acción no se puede deshacer.
+              Â¿EstÃ¡s seguro de que deseas eliminar el reporte de{" "}
+              <span className="font-semibold">{reporteDeleteModal.tecnico_nombre || "â€”"}</span> (
+              {formatSemanaLabel(reporteDeleteModal.semana_inicio, reporteDeleteModal.semana_fin)})? Esta acciÃ³n no se puede deshacer.
             </p>
             <div className="flex gap-3">
               <button
@@ -1076,7 +1076,7 @@ export default function ReportesPage() {
                 disabled={busy?.id === reporteDeleteModal.id && busy?.action === "delete"}
                 className="flex-1 px-4 py-2 text-sm font-medium text-white bg-error-600 rounded-lg hover:bg-error-700 focus:outline-none focus:ring-2 focus:ring-error-500/50 disabled:opacity-60"
               >
-                {busy?.id === reporteDeleteModal.id && busy?.action === "delete" ? "Eliminando…" : "Eliminar"}
+                {busy?.id === reporteDeleteModal.id && busy?.action === "delete" ? "Eliminandoâ€¦" : "Eliminar"}
               </button>
             </div>
           </div>
@@ -1118,7 +1118,7 @@ export default function ReportesPage() {
               </div>
 
               <div className="mt-3 text-[11px] text-gray-500 dark:text-gray-400">
-                Generando archivo de reporte semanal…
+                Generando archivo de reporte semanalâ€¦
               </div>
             </div>
           </div>
@@ -1128,3 +1128,5 @@ export default function ReportesPage() {
     </div>
   );
 }
+
+

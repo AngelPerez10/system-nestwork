@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { FocusTrap } from "focus-trap-react";
 import PageMeta from "@/components/common/PageMeta";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 
 type ChatRole = "user" | "assistant";
 
@@ -164,8 +164,6 @@ export default function IaPage() {
     }
     return groups;
   }, [filteredConversations]);
-
-  const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token");
 
   const getConversationTitle = (list: ChatMessage[]) => {
     const firstUser = list.find((m) => m.role === 'user' && String(m.content || '').trim());
@@ -350,12 +348,6 @@ export default function IaPage() {
     const text = prompt.trim();
     if (!text || sending) return;
 
-    const token = getToken();
-    if (!token) {
-      setError("No hay sesión activa (token).");
-      return;
-    }
-
     setError(null);
     setLastErrorStatus(null);
     setLastErrorKind(null);
@@ -399,7 +391,7 @@ export default function IaPage() {
       const resp = await fetch(apiUrl("/api/ai/chat/"), {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
+          ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ messages: toApiMessages(nextConversation) }),

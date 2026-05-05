@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import { Modal } from "@/components/ui/modal";
 import Alert from "@/components/ui/alert/Alert";
 import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
-import { apiUrl } from "@/config/api";
+import { apiUrl, getAuthHeaders } from "@/config/api";
 import { formatApiErrors } from "@/utils/apiUtils";
 import { Cliente } from "@/types/cliente";
 import {
@@ -76,7 +76,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
         colonia: "",
         codigo_postal: "",
         ciudad: "",
-        pais: "México",
+        pais: "MÃ©xico",
         estado: "",
         localidad: "",
         municipio: "",
@@ -97,7 +97,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
         numero_envio: "",
         colonia_envio: "",
         codigo_postal_envio: "",
-        pais_envio: "México",
+        pais_envio: "MÃ©xico",
         estado_envio: "",
         ciudad_envio: "",
         tipo: "EMPRESA",
@@ -144,7 +144,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                 colonia: "",
                 codigo_postal: "",
                 ciudad: "",
-                pais: "México",
+                pais: "MÃ©xico",
                 estado: "",
                 localidad: "",
                 municipio: "",
@@ -165,7 +165,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                 numero_envio: "",
                 colonia_envio: "",
                 codigo_postal_envio: "",
-                pais_envio: "México",
+                pais_envio: "MÃ©xico",
                 estado_envio: "",
                 ciudad_envio: "",
                 tipo: "EMPRESA",
@@ -294,7 +294,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
         }
     };
 
-    const getToken = () => localStorage.getItem("token") || sessionStorage.getItem("token");
+    const getToken = () => "cookie-session";
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -304,10 +304,10 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
             // Only check if permissions object is provided
         }
 
-        // Validación de campos requeridos
+        // ValidaciÃ³n de campos requeridos
         const missingFields: string[] = [];
-        if (!formData.nombre?.trim()) missingFields.push(formData.tipo === 'PERSONA_FISICA' ? 'Persona Física' : formData.tipo === 'PROVEEDOR' ? 'Proveedor' : 'Empresa');
-        if (!formData.telefono?.trim() || !onlyDigits10(formData.telefono)) missingFields.push('Teléfono (10 dígitos)');
+        if (!formData.nombre?.trim()) missingFields.push(formData.tipo === 'PERSONA_FISICA' ? 'Persona FÃ­sica' : formData.tipo === 'PROVEEDOR' ? 'Proveedor' : 'Empresa');
+        if (!formData.telefono?.trim() || !onlyDigits10(formData.telefono)) missingFields.push('TelÃ©fono (10 dÃ­gitos)');
 
         if (missingFields.length > 0) {
             setModalError(`Campos requeridos faltantes: ${missingFields.join(', ')}`);
@@ -323,7 +323,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
             const response = await fetch(url, {
                 method,
                 headers: {
-                    Authorization: `Bearer ${token}`,
+                    ...getAuthHeaders(),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
@@ -361,7 +361,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
         }
     };
 
-    const estadosOptions = estadosPorPais[formData.pais] || estadosPorPais["México"] || [];
+    const estadosOptions = estadosPorPais[formData.pais] || estadosPorPais["MÃ©xico"] || [];
     const isGoogleMapsUrl = (value: string | null | undefined) => {
         if (!value) return false;
         const s = String(value).trim();
@@ -382,7 +382,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                             </svg>
                         </span>
                         <div className="min-w-0">
-                            <p className={sectionLabelClass}>Contactos · Clientes</p>
+                            <p className={sectionLabelClass}>Contactos Â· Clientes</p>
                             <h3 className={`mt-1 ${claudeSectionHeadingClass}`}>
                                 {editingCliente ? "Editar Cliente" : "Nuevo Cliente"}
                             </h3>
@@ -412,7 +412,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                 : 'border-transparent bg-transparent text-gray-700 hover:bg-white dark:text-[#e5e7eb] dark:hover:bg-white/[0.06]'
                                 }`}
                         >
-                            Datos Básicos
+                            Datos BÃ¡sicos
                         </button>
                         <button
                             type="button"
@@ -422,14 +422,14 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                 : 'border-transparent bg-transparent text-gray-700 hover:bg-white dark:text-[#e5e7eb] dark:hover:bg-white/[0.06]'
                                 }`}
                         >
-                            Datos Facturación
+                            Datos FacturaciÃ³n
                         </button>
                     </div>
 
                     {activeTab === 'general' && (
                         <div className="space-y-4">
                             <div className={`${modalPanelClass} space-y-4`}>
-                                <p className={modalSectionTitleClass}>Información Comercial</p>
+                                <p className={modalSectionTitleClass}>InformaciÃ³n Comercial</p>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div><Label>{noClienteLabel}</Label><Input value={formData.no_cliente || ""} onChange={(e) => setFormData({ ...formData, no_cliente: e.target.value })} /></div>
                                     <div><Label>Clave</Label><Input value={formData.clave || ""} onChange={(e) => setFormData({ ...formData, clave: e.target.value })} /></div>
@@ -441,7 +441,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                             <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${formData.is_prospecto ? "translate-x-5" : "translate-x-1"}`} />
                                         </button>
                                         <span className="ml-2 text-xs font-medium text-[#8b7b69] dark:text-[#8ea0b8]">
-                                            {formData.is_prospecto ? "Sí" : "No"}
+                                            {formData.is_prospecto ? "SÃ­" : "No"}
                                         </span>
                                     </div>
                                 </div>
@@ -450,15 +450,15 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                     <div><Label>Nombre</Label><Input value={formData.nombre} onChange={(e) => setFormData({ ...formData, nombre: e.target.value })} /></div>
                                     <div><Label>RFC</Label><Input value={formData.rfc} onChange={(e) => setFormData({ ...formData, rfc: e.target.value })} /></div>
                                     <div><Label>CURP</Label><Input value={formData.curp} onChange={(e) => setFormData({ ...formData, curp: e.target.value })} /></div>
-                                    <div><Label>Teléfono</Label><Input value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: (e.target.value || "").replace(/\D/g, "") })} /></div>
+                                    <div><Label>TelÃ©fono</Label><Input value={formData.telefono} onChange={(e) => setFormData({ ...formData, telefono: (e.target.value || "").replace(/\D/g, "") })} /></div>
                                     <div><Label>Celular</Label><Input value={formData.celular || ""} onChange={(e) => setFormData({ ...formData, celular: (e.target.value || "").replace(/\D/g, "") })} /></div>
                                 </div>
                                 <div><Label>Correo</Label><Input type="email" value={formData.correo} onChange={(e) => setFormData({ ...formData, correo: e.target.value })} /></div>
                                 <div><Label>Comentario</Label><textarea rows={4} value={formData.notas} onChange={(e) => setFormData({ ...formData, notas: e.target.value })} className={modalTextareaClass} /></div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div><Label>No. de Precio</Label><select value={formData.numero_precio || "1"} onChange={(e) => setFormData({ ...formData, numero_precio: e.target.value })} className={selectLikeClassName}><option value="1">Precio 1</option><option value="2">Precio 2</option><option value="3">Precio 3</option></select></div>
-                                    <div><Label>Límite Crédito</Label><Input type="number" value={formData.limite_credito} onChange={(e) => setFormData({ ...formData, limite_credito: e.target.value })} /></div>
-                                    <div><Label>Días crédito</Label><Input type="number" value={formData.dias_credito} onChange={(e) => setFormData({ ...formData, dias_credito: e.target.value })} /></div>
+                                    <div><Label>LÃ­mite CrÃ©dito</Label><Input type="number" value={formData.limite_credito} onChange={(e) => setFormData({ ...formData, limite_credito: e.target.value })} /></div>
+                                    <div><Label>DÃ­as crÃ©dito</Label><Input type="number" value={formData.dias_credito} onChange={(e) => setFormData({ ...formData, dias_credito: e.target.value })} /></div>
                                 </div>
                             </div>
                         </div>
@@ -467,13 +467,13 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                     {activeTab === 'more' && (
                         <div className="space-y-4">
                             <div className={`${modalPanelClass} space-y-4`}>
-                                <p className={modalSectionTitleClass}>Información Fiscal</p>
+                                <p className={modalSectionTitleClass}>InformaciÃ³n Fiscal</p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div><Label>RFC</Label><Input value={formData.rfc_fiscal || ""} onChange={(e) => setFormData({ ...formData, rfc_fiscal: e.target.value })} /></div>
                                     <div><Label>idCIF</Label><Input value={formData.idcif || ""} onChange={(e) => setFormData({ ...formData, idcif: e.target.value })} /></div>
-                                    <div><Label>Razón Social</Label><Input value={formData.razon_social || ""} onChange={(e) => setFormData({ ...formData, razon_social: e.target.value })} /></div>
+                                    <div><Label>RazÃ³n Social</Label><Input value={formData.razon_social || ""} onChange={(e) => setFormData({ ...formData, razon_social: e.target.value })} /></div>
                                     <div><Label>CURP</Label><Input value={formData.curp_fiscal || ""} onChange={(e) => setFormData({ ...formData, curp_fiscal: e.target.value })} /></div>
-                                    <div><Label>Régimen Fiscal</Label><Input value={formData.regimen_fiscal || ""} onChange={(e) => setFormData({ ...formData, regimen_fiscal: e.target.value })} /></div>
+                                    <div><Label>RÃ©gimen Fiscal</Label><Input value={formData.regimen_fiscal || ""} onChange={(e) => setFormData({ ...formData, regimen_fiscal: e.target.value })} /></div>
                                     <div><Label>Uso CFDI</Label><Input value={formData.uso_cfdi || ""} onChange={(e) => setFormData({ ...formData, uso_cfdi: e.target.value })} /></div>
                                 </div>
                                 <div>
@@ -496,7 +496,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                             value={formData.direccion}
                                             onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
                                             className={`${modalTextareaClass} pr-12`}
-                                            placeholder="Dirección, coordenadas o URL de Google Maps"
+                                            placeholder="DirecciÃ³n, coordenadas o URL de Google Maps"
                                         />
                                         {!!formData.direccion?.trim() && (
                                             <button
@@ -530,7 +530,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                     <div><Label>No. Ext</Label><Input value={formData.numero_exterior} onChange={(e) => setFormData({ ...formData, numero_exterior: e.target.value })} /></div>
                                     <div><Label>No. Int</Label><Input value={formData.interior} onChange={(e) => setFormData({ ...formData, interior: e.target.value })} /></div>
-                                    <div><Label>Código Postal</Label><Input value={formData.codigo_postal} onChange={(e) => setFormData({ ...formData, codigo_postal: e.target.value })} /></div>
+                                    <div><Label>CÃ³digo Postal</Label><Input value={formData.codigo_postal} onChange={(e) => setFormData({ ...formData, codigo_postal: e.target.value })} /></div>
                                     <div><Label>Colonia</Label><Input value={formData.colonia} onChange={(e) => setFormData({ ...formData, colonia: e.target.value })} /></div>
                                     <div><Label>Ciudad</Label><Input value={formData.ciudad} onChange={(e) => setFormData({ ...formData, ciudad: e.target.value })} /></div>
                                     <div><Label>Localidad</Label><Input value={formData.localidad} onChange={(e) => setFormData({ ...formData, localidad: e.target.value })} /></div>
@@ -542,10 +542,10 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                         </select>
                                     </div>
                                     <div>
-                                        <Label>País</Label>
-                                        <select value={formData.pais || "México"} onChange={(e) => {
+                                        <Label>PaÃ­s</Label>
+                                        <select value={formData.pais || "MÃ©xico"} onChange={(e) => {
                                             const pais = e.target.value;
-                                            const nextEstados = estadosPorPais[pais] || estadosPorPais["México"] || [];
+                                            const nextEstados = estadosPorPais[pais] || estadosPorPais["MÃ©xico"] || [];
                                             const nextEstado = nextEstados.includes(formData.estado) ? formData.estado : "";
                                             setFormData({ ...formData, pais, estado: nextEstado });
                                         }} className={selectLikeClassName}>
@@ -599,8 +599,8 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                     </svg>
                                 </div>
                                 <div className="flex-1">
-                                    <h5 className="text-base font-semibold text-gray-800 dark:text-gray-100">Seleccionar Ubicación</h5>
-                                    <p className="text-[11px] text-gray-500 dark:text-gray-400">Haz clic en el mapa para seleccionar la ubicación</p>
+                                    <h5 className="text-base font-semibold text-gray-800 dark:text-gray-100">Seleccionar UbicaciÃ³n</h5>
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400">Haz clic en el mapa para seleccionar la ubicaciÃ³n</p>
                                 </div>
                             </div>
                         </div>
@@ -645,7 +645,7 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
                                         onClick={handleConfirmMap}
                                         className="flex-1 sm:flex-none inline-flex items-center justify-center px-4 py-2 rounded-lg text-[12px] font-medium bg-[#ff801f] text-black hover:bg-[#ff6a00] disabled:opacity-50 transition-colors"
                                     >
-                                        Usar ubicación
+                                        Usar ubicaciÃ³n
                                     </button>
                                 </div>
                             </div>
@@ -656,4 +656,6 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
         </Modal>
     );
 };
+
+
 
