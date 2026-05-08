@@ -1253,8 +1253,9 @@ export default function DrawingBoard({
 
           {/* Line Width */}
           <div className="flex items-center gap-2.5 px-3 py-1.5 bg-white/60 dark:bg-gray-900/40 rounded-lg border border-gray-200/40 dark:border-gray-700/40">
-            <label className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Grosor</label>
+            <label htmlFor="line-width-slider" className="text-[11px] font-medium text-gray-600 dark:text-gray-400">Grosor</label>
             <input
+              id="line-width-slider"
               type="range"
               min="1"
               max="10"
@@ -1313,7 +1314,6 @@ export default function DrawingBoard({
                   }}
                   placeholder="Título..."
                   className="h-9 w-40 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm px-2 text-gray-800 dark:text-gray-200 outline-none"
-                  autoFocus
                 />
                 <button
                   type="button"

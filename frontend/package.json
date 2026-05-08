@@ -79,5 +79,12 @@
     "react-helmet-async": {
       "react": "^16.8.0 || ^17 || ^18 || ^19"
     }
+  },
+  "pnpm": {
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-36jr-mh4h-2g58"
+      ]
+    }
   }
 }

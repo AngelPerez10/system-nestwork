@@ -114,11 +114,15 @@ export const Modal: React.FC<ModalProps> = ({
           allowOutsideClick: true,
         }}
       >
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- focus-trap-react handles keyboard; stopPropagation is defensive */}
         <div
           ref={modalRef}
           tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
           className={`${contentClasses} ${className}`}
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
         >
           {showCloseButton && (
             <button

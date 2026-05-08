@@ -50,18 +50,31 @@ const Switch: React.FC<SwitchProps> = ({
       className={`flex cursor-pointer select-none items-center gap-3 text-sm font-medium ${
         disabled ? "text-gray-400" : "text-gray-700 dark:text-gray-400"
       }`}
-      onClick={handleToggle} // Toggle when the label itself is clicked
     >
       <div className="relative">
-        <div
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isChecked}
+          aria-label={label}
+          disabled={disabled}
+          onClick={handleToggle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleToggle();
+            }
+          }}
           className={`block transition duration-150 ease-linear h-6 w-11 rounded-full ${
             disabled
               ? "bg-gray-100 pointer-events-none dark:bg-gray-800"
               : switchColors.background
           }`}
-        ></div>
+        >
+          <span className="sr-only">{label}</span>
+        </button>
         <div
-          className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-theme-sm duration-150 ease-linear transform ${switchColors.knob}`}
+          className={`pointer-events-none absolute left-0.5 top-0.5 h-5 w-5 rounded-full shadow-theme-sm duration-150 ease-linear transform ${switchColors.knob}`}
         ></div>
       </div>
       {label}
