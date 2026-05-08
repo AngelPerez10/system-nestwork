@@ -4,11 +4,22 @@ from datetime import date
 
 from django.conf import settings
 from django.core.cache import cache
-from rest_framework.decorators import api_view, permission_classes
+from django.core.files.uploadedfile import InMemoryUploadedFile
+from io import BytesIO
+from rest_framework.decorators import api_view, parser_classes, permission_classes
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from api.modules.users.services import tenant_schema_name, visible_users_queryset
+from api.utils.orden_media import (
+    assert_max_fotos,
+    migrate_row_fotos_refs,
+    normalize_fotos_refs_list,
+    orden_public_dict,
+    strip_legacy_fotos_urls_from_store,
+)
+from api.utils import r2_storage
 
 
 def _bucket_key(name: str) -> str:
@@ -79,14 +90,33 @@ def ordenes_collection(request):
         return guard
     rows = _read_list("ordenes")
     if request.method == "GET":
-        return Response(_paginate(request, rows))
+        page = _paginate(request, rows)
+        page["results"] = [orden_public_dict(dict(r)) for r in page["results"]]
+        return Response(page)
 
-    payload = request.data if isinstance(request.data, dict) else {}
+    payload = dict(request.data) if isinstance(request.data, dict) else {}
+    refs_in = None
+    if "fotos_refs" in payload:
+        refs_in = normalize_fotos_refs_list(payload.pop("fotos_refs", []))
+    elif "fotos_urls" in payload:
+        refs_in = normalize_fotos_refs_list(payload.pop("fotos_urls", []))
+    payload.pop("fotos_urls", None)
+
+    if refs_in is not None:
+        try:
+            assert_max_fotos(refs_in)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
     item_id = _next_id(rows)
     item = {"id": item_id, "idx": item_id, **payload}
+    if refs_in is not None:
+        item["fotos_refs"] = refs_in
+    migrate_row_fotos_refs(item)
+    strip_legacy_fotos_urls_from_store(item)
     rows.append(item)
     _write_list("ordenes", rows)
-    return Response(item, status=201)
+    return Response(orden_public_dict(item), status=201)
 
 
 @api_view(["GET", "PATCH", "PUT", "DELETE"])
@@ -100,16 +130,38 @@ def ordenes_detail(request, orden_id: int):
     if not row:
         return Response({"detail": "No encontrado"}, status=404)
 
+    migrate_row_fotos_refs(row)
+
     if request.method == "GET":
-        return Response(row)
+        return Response(orden_public_dict(row))
     if request.method == "DELETE":
         _write_list("ordenes", [r for r in rows if int(r.get("id", 0)) != orden_id])
         return Response(status=204)
 
-    patch = request.data if isinstance(request.data, dict) else {}
+    patch = dict(request.data) if isinstance(request.data, dict) else {}
+    refs_updated = False
+    refs: list[str] = []
+    if "fotos_refs" in patch:
+        refs = normalize_fotos_refs_list(patch.pop("fotos_refs", []))
+        refs_updated = True
+    elif "fotos_urls" in patch:
+        refs = normalize_fotos_refs_list(patch.pop("fotos_urls", []))
+        refs_updated = True
+
+    patch.pop("fotos_urls", None)
+
+    if refs_updated:
+        try:
+            assert_max_fotos(refs)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        row["fotos_refs"] = refs
+
     row.update(patch)
+    migrate_row_fotos_refs(row)
+    strip_legacy_fotos_urls_from_store(row)
     _write_list("ordenes", rows)
-    return Response(row)
+    return Response(orden_public_dict(row))
 
 
 @api_view(["GET"])
@@ -123,21 +175,75 @@ def ordenes_reportes_semanales(_request):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def ordenes_upload_image(request):
     guard = _reject_stub_surface()
     if guard:
         return guard
+
+    folder = "ordenes/fotos"
+    upload_file = request.FILES.get("image")
+
+    if upload_file is not None:
+        folder = (request.POST.get("folder") or folder).strip() or folder
+        if not r2_storage.r2_enabled():
+            return Response(
+                {"detail": "Almacenamiento R2 no configurado. Define R2_ACCOUNT_ID, R2_BUCKET, R2_ACCESS_KEY_ID y R2_SECRET_ACCESS_KEY."},
+                status=503,
+            )
+        raw = upload_file.read()
+        mem = InMemoryUploadedFile(
+            BytesIO(raw),
+            field_name="image",
+            name=getattr(upload_file, "name", "photo.jpg") or "photo.jpg",
+            content_type=getattr(upload_file, "content_type", "image/jpeg") or "image/jpeg",
+            size=len(raw),
+            charset=None,
+        )
+        try:
+            key, url = r2_storage.upload_image_for_tenant(file_obj=mem, folder=folder)
+        except PermissionError:
+            return Response({"detail": "No autorizado"}, status=403)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        except RuntimeError as exc:
+            return Response({"detail": str(exc)}, status=503)
+        return Response({"url": url, "key": key, "public_id": ""}, status=201)
+
     data = request.data if isinstance(request.data, dict) else {}
-    url = (data.get("data_url") or "").strip()
-    return Response({"url": url, "public_id": ""}, status=201)
+    data_url = (data.get("data_url") or "").strip()
+    folder = (data.get("folder") or folder).strip() or folder
+    if not data_url.startswith("data:image/"):
+        return Response({"detail": "Imagen inválida"}, status=400)
+
+    if r2_storage.r2_enabled():
+        try:
+            mem = r2_storage.data_url_to_in_memory_file(data_url)
+            key, url = r2_storage.upload_image_for_tenant(file_obj=mem, folder=folder)
+            return Response({"url": url, "key": key, "public_id": ""}, status=201)
+        except PermissionError:
+            return Response({"detail": "No autorizado"}, status=403)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        except RuntimeError as exc:
+            return Response({"detail": str(exc)}, status=503)
+
+    return Response({"url": data_url[:2_000_000], "key": "", "public_id": ""}, status=201)
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
-def ordenes_delete_image(_request):
+def ordenes_delete_image(request):
     guard = _reject_stub_surface()
     if guard:
         return guard
+    data = request.data if isinstance(request.data, dict) else {}
+    key = (data.get("key") or "").strip()
+    if key and r2_storage.r2_enabled():
+        try:
+            r2_storage.delete_object_for_tenant(key)
+        except PermissionError:
+            return Response({"detail": "No autorizado"}, status=403)
     return Response(status=204)
 
 
@@ -151,11 +257,22 @@ def ordenes_update_photos(request, orden_id: int):
     row = next((r for r in rows if int(r.get("id", 0)) == orden_id), None)
     if not row:
         return Response({"detail": "No encontrado"}, status=404)
-    payload = request.data if isinstance(request.data, dict) else {}
-    if "fotos_urls" in payload:
-        row["fotos_urls"] = payload.get("fotos_urls") or []
+    migrate_row_fotos_refs(row)
+    payload = dict(request.data) if isinstance(request.data, dict) else {}
+    if "fotos_refs" in payload:
+        refs = normalize_fotos_refs_list(payload.get("fotos_refs"))
+    elif "fotos_urls" in payload:
+        refs = normalize_fotos_refs_list(payload.get("fotos_urls"))
+    else:
+        return Response({"detail": "fotos_refs o fotos_urls requerido"}, status=400)
+    try:
+        assert_max_fotos(refs)
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    row["fotos_refs"] = refs
+    strip_legacy_fotos_urls_from_store(row)
     _write_list("ordenes", rows)
-    return Response(row)
+    return Response(orden_public_dict(row))
 
 
 @api_view(["GET", "PUT", "PATCH"])

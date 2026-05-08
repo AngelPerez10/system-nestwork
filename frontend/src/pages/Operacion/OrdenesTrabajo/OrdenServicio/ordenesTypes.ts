@@ -32,6 +32,8 @@ export interface Orden {
   firma_encargado_url: string;
   firma_cliente_url: string;
   fotos_urls: string[];
+  /** Refs de almacenamiento (R2); paralelo a fotos_urls cuando el backend las envía. */
+  fotos_refs?: string[];
   pdf_url?: string;
   fecha_creacion: string;
   tipo_orden?: "servicio_tecnico" | "levantamiento" | string;

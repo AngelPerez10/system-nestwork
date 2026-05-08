@@ -184,6 +184,7 @@ REST_FRAMEWORK = {
         "onboarding_lead": env("DRF_THROTTLE_ONBOARDING_LEAD", default="10/hour"),  # Reduced from 20
         "support_request": env("DRF_THROTTLE_SUPPORT_REQUEST", default="10/hour"),  # Reduced from 20
         "login": env("DRF_THROTTLE_LOGIN", default="5/hour"),  # Security: Reduced from 20 to prevent brute force
+        "superadmin": env("DRF_THROTTLE_SUPERADMIN", default="120/hour"),
     },
 }
 
@@ -227,15 +228,23 @@ AUTH_JWT_SESSION_COOKIES = env.bool("AUTH_JWT_SESSION_COOKIES", default=False)
 # Validate JWT_SIGNING_KEY: separate from SECRET_KEY to limit blast radius.
 # If compromised, only JWT tokens are affected — Django sessions, CSRF, and
 # password reset tokens remain protected by SECRET_KEY.
+# SECURITY: In production, JWT_SIGNING_KEY must be explicitly set — no fallback to SECRET_KEY.
 _jwt_key = SIMPLE_JWT["SIGNING_KEY"]
 if not _jwt_key:
-    import warnings
-    warnings.warn(
-        "JWT_SIGNING_KEY is not set. Falling back to DJANGO_SECRET_KEY. "
-        "Set a separate JWT_SIGNING_KEY in your .env file for proper secret isolation.",
-        stacklevel=2,
-    )
-    SIMPLE_JWT["SIGNING_KEY"] = SECRET_KEY
+    if env.bool("DJANGO_DEBUG", default=False):
+        import warnings
+        warnings.warn(
+            "JWT_SIGNING_KEY is not set. Falling back to DJANGO_SECRET_KEY in DEBUG mode. "
+            "Set a separate JWT_SIGNING_KEY in your .env file for proper secret isolation.",
+            stacklevel=2,
+        )
+        SIMPLE_JWT["SIGNING_KEY"] = SECRET_KEY
+    else:
+        raise ImproperlyConfigured(
+            "JWT_SIGNING_KEY environment variable is required in production. "
+            "It must be a separate secret from DJANGO_SECRET_KEY for proper secret isolation. "
+            "Generate one with: python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'"
+        )
 
 # Security: Cookie settings for JWT tokens
 # These ensure httpOnly cookies work correctly in production
@@ -285,3 +294,11 @@ ALLOW_REGISTER_WITHOUT_PAYMENT = env.bool("ALLOW_REGISTER_WITHOUT_PAYMENT", defa
 # Precio mostrado: base + IVA 16% (MXN), cobro mensual recurrente vía preapproval.
 STARTER_PLAN_BASE_MXN = Decimal(str(env.str("STARTER_PLAN_BASE_MXN", default="200.00")))
 STARTER_PLAN_IVA_RATE = Decimal(str(env.str("STARTER_PLAN_IVA_RATE", default="0.16")))
+
+# --- Cloudflare R2 (S3-compatible) — fotos de órdenes / tareas (opcional) ---
+# Si falta alguna variable, el backend puede seguir usando refs legacy (data URLs)
+# cuando ENABLE_OPS_STUBS u otros stubs están activos; en producción configura R2.
+R2_ACCOUNT_ID = env.str("R2_ACCOUNT_ID", default="").strip()
+R2_BUCKET_NAME = (env.str("R2_BUCKET", default="") or env.str("R2_BUCKET_NAME", default="")).strip()
+R2_ACCESS_KEY_ID = env.str("R2_ACCESS_KEY_ID", default="").strip()
+R2_SECRET_ACCESS_KEY = env.str("R2_SECRET_ACCESS_KEY", default="").strip()

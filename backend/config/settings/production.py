@@ -49,4 +49,14 @@ if not CORS_ALLOWED_ORIGINS:
         "Production requires CORS_ALLOWED_ORIGINS (exact frontend origins), not wildcards."
     )
 
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=CORS_ALLOWED_ORIGINS)
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+if not CSRF_TRUSTED_ORIGINS:
+    raise ValueError(
+        "Production requires CSRF_TRUSTED_ORIGINS. "
+        "Set the exact frontend origin URLs (e.g., ['https://app.nestwork.mx']). "
+        "This prevents CSRF attacks on cookie-based auth endpoints."
+    )
+
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
+SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"

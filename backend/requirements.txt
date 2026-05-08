@@ -51,11 +51,16 @@ mercadopago==2.2.3
 # Pillow for image validation and processing
 Pillow==12.2.0
 
+# Cloudflare R2 / S3-compatible object storage (tenant-scoped uploads)
+django-storages[s3]==1.14.4
+boto3==1.35.93
+
 # =============================================================================
-# DEVELOPMENT (optional, uncomment for dev environments)
+# DEVELOPMENT & SECURITY TOOLS
 # =============================================================================
-# pytest==8.4.1
-# pytest-django==4.11.1
-# black==25.1.0
-# ruff==0.11.0
-# mypy==1.15.0
+pytest==8.4.1
+pytest-django==4.11.1
+black==25.1.0
+ruff==0.11.0
+mypy==1.15.0
+bandit==1.8.3

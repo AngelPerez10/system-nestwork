@@ -8,6 +8,7 @@ import Alert from '@/components/ui/alert/Alert';
 import { Modal } from '@/components/ui/modal';
 import SignaturePad from '@/components/ui/signature/SignaturePad';
 import { apiUrl } from '@/config/api';
+import { useAuth } from '@/context/AuthContext';
 import { EyeCloseIcon, EyeIcon, MoreDotIcon } from '@/icons';
 
 type Role = 'admin' | 'tecnico';
@@ -139,6 +140,9 @@ const secondaryOutlineBtnClass =
 const selectFieldClass =
   "h-11 w-full rounded-xl border border-[#e2d9ca] bg-[#fffdfa] px-3 text-sm text-[#1c1917] shadow-none outline-none transition-colors focus:border-[#ff801f] focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:focus:border-[#fb923c] dark:focus:ring-[#fb923c]/20";
 
+/** Plan estándar: 1 admin + 2 técnicos (máx. 3 cuentas por empresa). */
+const MAX_USERS_PER_EMPRESA = 3;
+
 const buildSchemaFromCompanyName = (rawName: string): string => {
   const normalized = (rawName || '')
     .normalize('NFD')
@@ -150,6 +154,13 @@ const buildSchemaFromCompanyName = (rawName: string): string => {
   const base = normalized || 'empresa';
   return base.slice(0, 63);
 };
+
+const normalizeIdentityText = (value: unknown): string =>
+  String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 
 const getAuthHeaders = (): Record<string, string> => {
   const token = (
@@ -227,28 +238,6 @@ const superadminService = {
     const rows = Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : [];
     return rows as CompanyRoleProfile[];
   },
-};
-
-/** Any admin user can assign permissions to others. */
-const canDelegateUserPermissions = (): boolean => {
-  try {
-    const roleRaw = (localStorage.getItem('role') || sessionStorage.getItem('role') || '').trim().toLowerCase();
-    if (roleRaw === 'superadmin' || roleRaw === 'admin') return true;
-    const superRaw = localStorage.getItem('is_superuser') || sessionStorage.getItem('is_superuser');
-    if (superRaw && String(superRaw).toLowerCase() === 'true') return true;
-    const staffRaw = localStorage.getItem('is_staff') || sessionStorage.getItem('is_staff');
-    if (staffRaw && String(staffRaw).toLowerCase() === 'true') return true;
-    const userRaw = localStorage.getItem('user') || sessionStorage.getItem('user');
-    if (userRaw) {
-      const u = JSON.parse(userRaw);
-      if (u?.is_superuser || u?.is_staff) return true;
-      const pr = String(u?.platform_role || '').toUpperCase();
-      if (pr === 'SUPERADMIN' || pr === 'ADMIN_EMPRESA') return true;
-    }
-  } catch {
-    /* ignore */
-  }
-  return false;
 };
 
 /** Prevent deactivating superadmin users from the UI. */
@@ -358,6 +347,7 @@ const generatePassword = (username: string, firstName: string, lastName: string)
 };
 
 export default function UserProfiles() {
+  const auth = useAuth();
   const navigate = useNavigate();
   const API = apiUrl('/api/users/accounts/');
 
@@ -412,6 +402,15 @@ export default function UserProfiles() {
   const [editingCompanyId, setEditingCompanyId] = useState<number | null>(null);
   const [assignUserId, setAssignUserId] = useState<number | null>(null);
   const [assignCompanyId, setAssignCompanyId] = useState<number | null>(null);
+  const [selectedCompanyModal, setSelectedCompanyModal] = useState<{
+    id: number;
+    name: string;
+    schema_name: string;
+    users: UserAccount[];
+  } | null>(null);
+  const [companyModalEditName, setCompanyModalEditName] = useState('');
+  const [companyModalSaving, setCompanyModalSaving] = useState(false);
+  const [companyModalError, setCompanyModalError] = useState<string | null>(null);
 
   const [isPermsOpen, setIsPermsOpen] = useState(false);
   const [permsUser, setPermsUser] = useState<UserAccount | null>(null);
@@ -422,6 +421,11 @@ export default function UserProfiles() {
   const [permsOpenSections, setPermsOpenSections] = useState<Record<string, boolean>>({});
 
   const didInitRef = useRef(false);
+  const superTabs = [
+    { key: 'empresas', label: 'Empresas' },
+    { key: 'usuarios', label: 'Usuarios' },
+    { key: 'roles', label: 'Roles' },
+  ] as const;
 
   const normalizePerms = (p: any): Required<PermissionsPayload> => {
     const base: Required<PermissionsPayload> = {
@@ -668,22 +672,46 @@ export default function UserProfiles() {
       });
   }, [users, query, roleFilter]);
 
-  const isPlatformSuperuser = useMemo(() => {
+  const isPlatformSuperuser = auth.isSuperadmin;
+
+  const currentUsername = useMemo(() => {
     try {
-      const roleRaw = (localStorage.getItem('role') || sessionStorage.getItem('role') || '').trim().toLowerCase();
-      if (roleRaw === 'superadmin' || roleRaw === 'super_admin') return true;
-      const superRaw = localStorage.getItem('is_superuser') || sessionStorage.getItem('is_superuser');
-      if (superRaw && String(superRaw).toLowerCase() === 'true') return true;
+      const fromAuth = String(auth?.username || '').trim();
+      if (fromAuth) return fromAuth;
+      const fromStorage =
+        (localStorage.getItem('username') || sessionStorage.getItem('username') || '').trim();
+      if (fromStorage) return fromStorage;
       const userRaw = localStorage.getItem('user') || sessionStorage.getItem('user');
       const user = userRaw ? JSON.parse(userRaw) : null;
-      return !!(user?.is_superuser || String(user?.platform_role || '').toUpperCase() === 'SUPERADMIN');
+      return String(user?.username || '').trim();
     } catch {
-      return false;
+      return '';
     }
-  }, []);
+  }, [auth?.username]);
+
+  const currentUserEmail = useMemo(() => {
+    try {
+      const fromAuth = String(auth?.email || '').trim().toLowerCase();
+      if (fromAuth) return fromAuth;
+      const userRaw = localStorage.getItem('user') || sessionStorage.getItem('user');
+      const user = userRaw ? JSON.parse(userRaw) : null;
+      return String(user?.email || '').trim().toLowerCase();
+    } catch {
+      return '';
+    }
+  }, [auth?.email]);
+
+  const isAngelSuperadmin = useMemo(
+    () => {
+      const username = normalizeIdentityText(currentUsername);
+      const email = normalizeIdentityText(currentUserEmail);
+      return username === 'angelperez10' || email === 'angeelp7457@gmail.com';
+    },
+    [currentUserEmail, currentUsername]
+  );
 
   const loadSuperadminData = useCallback(async () => {
-    if (!isPlatformSuperuser) return;
+    if (!isPlatformSuperuser && !isAngelSuperadmin) return;
     setCompanyLoading(true);
     try {
       const [companyRows, profiles] = await Promise.all([
@@ -695,25 +723,40 @@ export default function UserProfiles() {
     } finally {
       setCompanyLoading(false);
     }
-  }, [isPlatformSuperuser]);
+  }, [isAngelSuperadmin, isPlatformSuperuser]);
 
   useEffect(() => {
-    if (!isPlatformSuperuser) return;
+    if (!isPlatformSuperuser && !isAngelSuperadmin) return;
     loadSuperadminData();
-  }, [isPlatformSuperuser, loadSuperadminData]);
+  }, [isAngelSuperadmin, isPlatformSuperuser, loadSuperadminData]);
+
+  useEffect(() => {
+    if (!selectedCompanyModal) return;
+    setCompanyModalEditName(selectedCompanyModal.name);
+    setCompanyModalError(null);
+  }, [selectedCompanyModal]);
 
   const currentOrg = useMemo(() => {
     try {
       const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
       const user = raw ? JSON.parse(raw) : null;
+      const nameFromUser =
+        String(user?.organization_name || user?.company_name || user?.organization || '').trim();
       return {
         id: user?.organization_id ?? null,
         schema: String(user?.organization_schema || '').trim(),
+        name: nameFromUser,
       };
     } catch {
-      return { id: null, schema: '' };
+      return { id: null, schema: '', name: '' };
     }
   }, []);
+
+  const currentOrgLabel = useMemo(() => {
+    if (currentOrg.name) return currentOrg.name;
+    if (currentOrg.schema) return currentOrg.schema;
+    return 'No definida';
+  }, [currentOrg.name, currentOrg.schema]);
 
   const companyUsers = useMemo(() => {
     if (isPlatformSuperuser) return users;
@@ -768,6 +811,52 @@ export default function UserProfiles() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
   }, [filtered, isPlatformSuperuser]);
 
+  const companyCardsForAngel = useMemo(() => {
+    if (!isAngelSuperadmin) return [];
+    const byCompany = new Map<
+      string,
+      {
+        id: number;
+        name: string;
+        schema_name: string;
+        members: UserAccount[];
+      }
+    >();
+    for (const u of filteredForView) {
+      const schema = String(u.organization_schema || '').trim();
+      const name = String(u.organization_name || '').trim() || currentOrgLabel;
+      const key = schema || name.toLowerCase();
+      const oid = Number(u.organization_id ?? 0) || 0;
+      if (!byCompany.has(key)) {
+        byCompany.set(key, {
+          id: oid,
+          name,
+          schema_name: schema || 'Sin empresa',
+          members: [],
+        });
+      } else if (oid) {
+        const row = byCompany.get(key)!;
+        if (!row.id) row.id = oid;
+      }
+      byCompany.get(key)!.members.push(u);
+    }
+    const byName = String(query || '').trim().toLowerCase();
+    return Array.from(byCompany.values())
+      .filter((c) => {
+        if (!byName) return true;
+        const name = String(c.name || '').toLowerCase();
+        const schema = String(c.schema_name || '').toLowerCase();
+        return name.includes(byName) || schema.includes(byName);
+      })
+      .map((c) => {
+        const members = c.members || [];
+        const admins = members.filter((u) => isAdminUser(u)).length;
+        const tecnicos = Math.max(0, members.length - admins);
+        return { ...c, members, admins, tecnicos };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  }, [currentOrgLabel, filteredForView, isAngelSuperadmin, query]);
+
   const stats = useMemo(() => {
     const base = isPlatformSuperuser ? users : companyUsers;
     const total = base.length;
@@ -793,7 +882,7 @@ export default function UserProfiles() {
 
   const createLimitReason = useMemo(() => {
     if (isPlatformSuperuser) return null;
-    if (companyRoleStats.total >= 3) {
+    if (companyRoleStats.total >= MAX_USERS_PER_EMPRESA) {
       return 'Tu plan actual permite máximo 3 usuarios por empresa (1 administrador y 2 técnicos).';
     }
     if (form.role === 'admin' && companyRoleStats.admins >= 1) {
@@ -808,7 +897,7 @@ export default function UserProfiles() {
   const companySchemaPreview = useMemo(() => buildSchemaFromCompanyName(companyForm.name), [companyForm.name]);
 
   const openCreate = () => {
-    if (companyRoleStats.total >= 3 && !isPlatformSuperuser) {
+    if (companyRoleStats.total >= MAX_USERS_PER_EMPRESA && !isPlatformSuperuser) {
       setError('Tu plan actual permite máximo 3 usuarios por empresa (1 administrador y 2 técnicos).');
       return;
     }
@@ -835,6 +924,39 @@ export default function UserProfiles() {
       setSuccess('Empresa creada');
     } catch (e: any) {
       setError(e?.message || 'No se pudo crear empresa');
+    }
+  };
+
+  const saveCompanyModalName = async () => {
+    if (!selectedCompanyModal || (!isPlatformSuperuser && !isAngelSuperadmin)) return;
+    const trimmed = companyModalEditName.trim();
+    if (!trimmed) {
+      setCompanyModalError('El nombre no puede estar vacío.');
+      return;
+    }
+    if (!selectedCompanyModal.id) {
+      setCompanyModalError(
+        'No hay id de empresa en los datos del usuario. Asigna organización en backend o recarga la lista.'
+      );
+      return;
+    }
+    setCompanyModalSaving(true);
+    setCompanyModalError(null);
+    try {
+      await superadminService.updateCompany(selectedCompanyModal.id, { name: trimmed });
+      setSelectedCompanyModal((prev) => (prev ? { ...prev, name: trimmed } : null));
+      if (isPlatformSuperuser) {
+        setCompanies((prev) =>
+          prev.map((c) => (c.id === selectedCompanyModal.id ? { ...c, name: trimmed } : c))
+        );
+      }
+      await loadUsers();
+      setSuccess('Nombre de empresa actualizado');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'No se pudo guardar';
+      setCompanyModalError(msg);
+    } finally {
+      setCompanyModalSaving(false);
     }
   };
 
@@ -947,7 +1069,8 @@ export default function UserProfiles() {
     if (form.password !== form.password2) return 'Confirmación de contraseña no coincide';
 
     if (!isPlatformSuperuser) {
-      if (companyRoleStats.total >= 3) return 'Tu plan actual permite máximo 3 usuarios por empresa (1 administrador y 2 técnicos).';
+      if (companyRoleStats.total >= MAX_USERS_PER_EMPRESA)
+        return `Tu plan actual permite máximo ${MAX_USERS_PER_EMPRESA} usuarios por empresa (1 administrador y 2 técnicos).`;
       if (form.role === 'admin' && companyRoleStats.admins >= 1) return 'Tu empresa ya tiene un administrador. Solo se permite 1 administrador por membresía.';
       if (form.role === 'tecnico' && companyRoleStats.tecnicos >= 2) return 'Tu empresa ya alcanzó el límite de 2 técnicos.';
     }
@@ -1018,7 +1141,7 @@ export default function UserProfiles() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.detail || 'Error al crear usuario');
 
-      if (form.role === 'admin' && typeof (data as any)?.id === 'number' && canDelegateUserPermissions()) {
+      if (form.role === 'admin' && typeof (data as any)?.id === 'number' && (auth.isAdmin || auth.isSuperadmin)) {
         await seedAdminPerms((data as any).id);
       }
 
@@ -1085,7 +1208,7 @@ export default function UserProfiles() {
 
       const wasAdmin = !!editUser.is_superuser || !!editUser.is_staff;
       const willBeAdmin = editForm.role === 'admin';
-      if (!wasAdmin && willBeAdmin && canDelegateUserPermissions()) {
+      if (!wasAdmin && willBeAdmin && (auth.isAdmin || auth.isSuperadmin)) {
         await seedAdminPerms(editUser.id);
       }
 
@@ -1249,7 +1372,7 @@ export default function UserProfiles() {
 
             <div className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#273244] dark:bg-[#111a2b]/90 sm:p-4">
               <div className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#c7d2fe] bg-[#eef2ff] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-950/40 dark:text-indigo-200 sm:h-10 sm:w-10">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#fed7aa] bg-[#fff7ed] text-[#c2410c] dark:border-[#9a3412]/40 dark:bg-[#7c2d12]/20 dark:text-[#fdba74] sm:h-10 sm:w-10">
                   <svg viewBox="0 0 24 24" className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor">
                     <path d="M12 3l2.5 6L21 10l-5 4 1.5 7L12 18l-5.5 3 1.5-7-5-4 6.5-1L12 3z" />
                   </svg>
@@ -1263,7 +1386,7 @@ export default function UserProfiles() {
 
             <div className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#273244] dark:bg-[#111a2b]/90 sm:p-4">
               <div className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#bae6fd] bg-[#f0f9ff] text-sky-800 dark:border-sky-500/30 dark:bg-sky-950/35 dark:text-sky-200 sm:h-10 sm:w-10">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#fed7aa] bg-[#fff7ed] text-[#9a3412] dark:border-[#9a3412]/40 dark:bg-[#7c2d12]/20 dark:text-[#fdba74] sm:h-10 sm:w-10">
                   <svg viewBox="0 0 24 24" className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" fill="none" stroke="currentColor" strokeWidth="1.8" />
                     <circle cx="12" cy="7" r="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
@@ -1342,6 +1465,25 @@ export default function UserProfiles() {
             )}
           </div>
 
+          {isPlatformSuperuser && (
+            <section className="rounded-2xl border border-[#f3dfcd] bg-gradient-to-r from-[#fff7ef] via-[#fffdfa] to-[#fff7ef] p-4 shadow-[0_22px_38px_-34px_rgba(28,25,23,0.34)] dark:border-[#273244] dark:bg-[#0f172a]/70 sm:p-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-[#eadfce] bg-white/80 p-3 dark:border-[#334155] dark:bg-[#0f172a]/80">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#78716c] dark:text-[#94a3b8]">Empresas</p>
+                  <p className="mt-1 text-xl font-semibold text-[#1f2937] dark:text-[#f8fafc]">{companies.length}</p>
+                </div>
+                <div className="rounded-xl border border-[#eadfce] bg-white/80 p-3 dark:border-[#334155] dark:bg-[#0f172a]/80">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#78716c] dark:text-[#94a3b8]">Usuarios sin empresa</p>
+                  <p className="mt-1 text-xl font-semibold text-[#1f2937] dark:text-[#f8fafc]">{unassignedUsers.length}</p>
+                </div>
+                <div className="rounded-xl border border-[#eadfce] bg-white/80 p-3 dark:border-[#334155] dark:bg-[#0f172a]/80">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#78716c] dark:text-[#94a3b8]">Perfiles</p>
+                  <p className="mt-1 text-xl font-semibold text-[#1f2937] dark:text-[#f8fafc]">{roleProfiles.length}</p>
+                </div>
+              </div>
+            </section>
+          )}
+
           <ComponentCard
             compact
             title="Listado de usuarios"
@@ -1392,20 +1534,83 @@ export default function UserProfiles() {
             )}
           >
 
-            {loading ? (
-              <div className="flex items-center justify-center py-14">
-                <div className="flex items-center gap-2.5 text-sm text-gray-400 dark:text-gray-500">
-                  <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
-                  </svg>
-                  Cargando usuarios…
-                </div>
-              </div>
-            ) : (
-              isPlatformSuperuser ? (
+            {(() => {
+              if (loading) {
+                return (
+                  <div className="flex items-center justify-center py-14">
+                    <div className="flex items-center gap-2.5 text-sm text-gray-400 dark:text-gray-500">
+                      <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+                      </svg>
+                      Cargando usuarios…
+                    </div>
+                  </div>
+                );
+              }
+
+              if (isAngelSuperadmin) {
+                return (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      {companyCardsForAngel.map((company) => (
+                        <button
+                          key={`${company.schema_name}::${company.name}`}
+                          type="button"
+                          onClick={() =>
+                            setSelectedCompanyModal({
+                              id: company.id,
+                              name: company.name,
+                              schema_name: company.schema_name,
+                              users: company.members,
+                            })
+                          }
+                          className="group relative overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa]/95 p-4 text-left shadow-[0_12px_32px_-28px_rgba(28,25,23,0.2)] transition-all hover:border-[#ff801f]/35 dark:border-[#273244] dark:bg-[#111827]/75 dark:hover:border-[#fb923c]/30"
+                          aria-label={`Ver usuarios de ${company.name}`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">{company.name}</p>
+                              <p className="truncate text-xs text-gray-500 dark:text-gray-400">Empresa: {company.schema_name}</p>
+                            </div>
+                            <span
+                              className={`inline-flex shrink-0 items-center rounded-md px-2 py-1 text-[11px] font-semibold ${
+                                company.members.length >= MAX_USERS_PER_EMPRESA
+                                  ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200'
+                                  : 'bg-[#ff801f]/12 text-[#9a3412] dark:bg-[#ff801f]/20 dark:text-[#ffa057]'
+                              }`}
+                              aria-label={`${company.members.length} de ${MAX_USERS_PER_EMPRESA} usuarios`}
+                            >
+                              {company.members.length}/{MAX_USERS_PER_EMPRESA} usuarios
+                            </span>
+                          </div>
+                          <div className="mt-3 flex items-center gap-2 text-[11px] text-gray-600 dark:text-gray-300">
+                            <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-1 font-semibold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
+                              {company.admins} admin
+                            </span>
+                            <span className="inline-flex items-center rounded-md bg-sky-100 px-2 py-1 font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">
+                              {company.tecnicos} técnico
+                            </span>
+                          </div>
+                          <p className="mt-3 text-xs font-medium text-[#9a3412] transition-colors group-hover:text-[#c2410c] dark:text-[#ffa057] dark:group-hover:text-[#ffb680]">
+                            Ver usuarios de la empresa →
+                          </p>
+                        </button>
+                      ))}
+                      {!companyCardsForAngel.length && (
+                        <div className="col-span-full rounded-xl border border-dashed border-[#e7ded0] px-4 py-8 text-center text-sm text-gray-500 dark:border-[#334155] dark:text-gray-400">
+                          No hay empresas para mostrar con los filtros actuales.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              if (isPlatformSuperuser) {
+                return (
                 <div className="space-y-4">
                   {groupedCompanies.map((company) => {
-                    const limitReached = company.users.length >= 3;
+                    const limitReached = company.users.length >= MAX_USERS_PER_EMPRESA;
                     return (
                       <section
                         key={company.key}
@@ -1416,7 +1621,7 @@ export default function UserProfiles() {
                           <div>
                             <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">{company.name}</h4>
                             <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {company.schema ? `Schema: ${company.schema}` : 'Sin schema'}
+                              {company.schema ? `Empresa: ${company.schema}` : 'Sin empresa'}
                             </p>
                           </div>
                           <span className={`inline-flex items-center rounded-lg px-2 py-1 text-[11px] font-semibold ${limitReached
@@ -1456,7 +1661,10 @@ export default function UserProfiles() {
                     </div>
                   )}
                 </div>
-              ) : (
+                );
+              }
+
+              return (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {filteredForView.map((u) => {
                   const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
@@ -1561,6 +1769,10 @@ export default function UserProfiles() {
                           <span className="text-gray-400 dark:text-gray-500">Correo:</span>{' '}
                           {u.email || '—'}
                         </div>
+                        <div className="truncate text-xs text-gray-500 dark:text-gray-400">
+                          <span className="text-gray-400 dark:text-gray-500">Empresa:</span>{' '}
+                          {currentOrgLabel}
+                        </div>
                         {u.password_enabled && (
                           <div className="flex items-center gap-1.5">
                             <svg className="h-3.5 w-3.5 text-gray-400 dark:text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -1634,9 +1846,150 @@ export default function UserProfiles() {
                   </div>
                 )}
               </div>
-              )
-            )}
+              );
+            })()}
           </ComponentCard>
+
+          <Modal
+            mobileBottomSheet
+            isOpen={!!selectedCompanyModal}
+            onClose={() => setSelectedCompanyModal(null)}
+            closeOnEscape={!isEditOpen && !isPermsOpen}
+            className="flex max-h-[min(94vh,820px)] w-[min(96vw,60rem)] flex-col overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa] p-0 shadow-[0_26px_70px_-40px_rgba(28,25,23,0.45)] dark:border-[#273244] dark:bg-[#111a2b] sm:w-[min(95vw,60rem)]"
+          >
+            <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+              <header className="relative shrink-0 border-b border-[#e7ded0] bg-[#fcfaf6] px-4 py-4 pr-14 dark:border-[#334155] dark:bg-[#111827] sm:px-6 sm:py-5 sm:pr-16">
+                <div className="pointer-events-none absolute left-0 top-0 h-0.5 w-full bg-[#ff801f]" aria-hidden />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <div className="min-w-0 space-y-2">
+                    <p className={sectionLabelClass}>Empresa</p>
+                    {!isAngelSuperadmin && !isPlatformSuperuser ? (
+                      <h3 id="company-modal-title" className={`mt-1 ${claudeSubheadingClass}`}>
+                        {selectedCompanyModal?.name || 'Empresa'}
+                      </h3>
+                    ) : (
+                      <div className="mt-1 space-y-2">
+                        <Label htmlFor="company-modal-name" className="text-xs">
+                          Nombre de la empresa
+                        </Label>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                          <Input
+                            id="company-modal-name"
+                            type="text"
+                            value={companyModalEditName}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                              setCompanyModalEditName(e.target.value)
+                            }
+                            placeholder="Nombre comercial"
+                            className="rounded-xl bg-white dark:bg-[#0f172a]"
+                          />
+                          {(isAngelSuperadmin || isPlatformSuperuser) && (
+                            <button
+                              type="button"
+                              onClick={() => void saveCompanyModalName()}
+                              disabled={
+                                companyModalSaving ||
+                                !companyModalEditName.trim() ||
+                                companyModalEditName.trim() === (selectedCompanyModal?.name || '').trim()
+                              }
+                              className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center self-end rounded-xl bg-[#ff801f] px-4 py-2 text-sm font-semibold text-black transition-colors hover:bg-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                            >
+                              {companyModalSaving ? 'Guardando…' : 'Guardar nombre'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full border border-[#e7ded0] bg-white px-2.5 py-1 text-[11px] font-medium text-[#57534e] dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#cbd5e1]">
+                        Empresa: {selectedCompanyModal?.schema_name || '—'}
+                      </span>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          (selectedCompanyModal?.users.length ?? 0) >= MAX_USERS_PER_EMPRESA
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-200'
+                            : 'bg-[#ff801f]/10 text-[#9a3412] dark:bg-[#ff801f]/20 dark:text-[#fdba74]'
+                          }`}
+                      >
+                        {(selectedCompanyModal?.users.length ?? 0)}/{MAX_USERS_PER_EMPRESA} usuarios
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Plan: 1 admin + 2 técnicos
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {companyModalError ? (
+                  <p className="mt-3 text-xs font-medium text-red-600 dark:text-red-400" role="alert">
+                    {companyModalError}
+                  </p>
+                ) : null}
+              </header>
+              <div className="custom-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto bg-[#fffdfa] px-4 py-4 dark:bg-[#111a2b] sm:px-5 sm:py-5">
+                {selectedCompanyModal?.users.length ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {selectedCompanyModal.users
+                      .slice()
+                      .sort((a, b) => a.username.localeCompare(b.username, 'es'))
+                      .map((u) => {
+                        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+                        const isAdmin = isAdminUser(u);
+                        return (
+                          <article
+                            key={u.id}
+                            className="rounded-2xl border border-[#e7ded0] bg-white px-3.5 py-3 shadow-[0_10px_28px_-24px_rgba(28,25,23,0.25)] transition-colors hover:border-[#ff801f]/30 dark:border-[#334155] dark:bg-[#0f172a] dark:hover:border-[#fb923c]/30"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{u.username}</p>
+                              <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-semibold ${roleBadge(u)}`}>
+                                {isAdmin ? 'Admin' : 'Técnico'}
+                              </span>
+                            </div>
+                            <p className="mt-1 truncate text-xs text-gray-600 dark:text-gray-300">{fullName || '—'}</p>
+                            <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">{u.email || '—'}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <div className="w-full" aria-hidden />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  openEdit(u);
+                                }}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#e7ded0] bg-[#fffdf8] text-[#57534e] transition-colors hover:bg-[#ff801f]/10 hover:text-[#9a3412] dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:hover:text-[#fdba74]"
+                                aria-label={`Editar usuario ${u.username}`}
+                                title="Editar usuario"
+                              >
+                                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                                  <path d="M12 20h9" />
+                                  <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void openPerms(u);
+                                }}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[#e7ded0] bg-white text-[#57534e] transition-colors hover:bg-[#fffdf8] hover:text-[#9a3412] dark:border-[#334155] dark:bg-[#111a2b] dark:text-[#e5e7eb] dark:hover:text-[#fdba74]"
+                                aria-label={`Abrir permisos de ${u.username}`}
+                                title="Permisos"
+                              >
+                                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden>
+                                  <path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7l-8-4Z" />
+                                  <path d="M9 12.5 11 14.5l4-4" />
+                                </svg>
+                              </button>
+                            </div>
+                          </article>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-[#e7ded0] px-4 py-8 text-center text-sm text-gray-500 dark:border-[#334155] dark:text-gray-400">
+                    Esta empresa no tiene usuarios asignados.
+                  </div>
+                )}
+              </div>
+            </div>
+          </Modal>
 
           <Modal
             mobileBottomSheet
@@ -1664,16 +2017,15 @@ export default function UserProfiles() {
               </header>
 
               <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fffdfa] px-3.5 py-3.5 dark:bg-[#111a2b] sm:px-5 sm:py-4">
-                <div className="inline-flex w-full rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-1 dark:border-[#334155] dark:bg-[#111a2b]">
-                  {[
-                    { key: 'empresas', label: 'Empresas' },
-                    { key: 'usuarios', label: 'Usuarios' },
-                    { key: 'roles', label: 'Roles' },
-                  ].map((t) => (
+                <div className="inline-flex w-full rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-1 dark:border-[#334155] dark:bg-[#111a2b]" role="tablist" aria-label="Secciones del panel super usuario">
+                  {superTabs.map((t) => (
                     <button
                       key={t.key}
                       type="button"
                       onClick={() => setSuperTab(t.key as 'empresas' | 'usuarios' | 'roles')}
+                      role="tab"
+                      aria-selected={superTab === t.key}
+                      aria-controls={`super-tab-panel-${t.key}`}
                       className={`h-9 min-h-[36px] flex-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors sm:h-10 sm:min-h-[40px] sm:px-3 ${superTab === t.key
                         ? 'bg-[#ff801f]/15 text-[#9a3412] dark:bg-[#ff801f]/20 dark:text-[#ffa057]'
                         : 'text-gray-600 hover:bg-white dark:text-gray-300 dark:hover:bg-white/10'
@@ -1685,7 +2037,7 @@ export default function UserProfiles() {
                 </div>
 
                 {superTab === 'empresas' && (
-                  <div className="space-y-4">
+                  <div className="space-y-4" role="tabpanel" id="super-tab-panel-empresas">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       <div>
                         <Label>Nombre empresa</Label>
@@ -1707,7 +2059,7 @@ export default function UserProfiles() {
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <div className="min-w-0">
                               <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{c.name}</p>
-                              <p className="truncate text-xs text-gray-500 dark:text-gray-400">Schema: {c.schema_name}</p>
+                              <p className="truncate text-xs text-gray-500 dark:text-gray-400">Empresa: {c.schema_name}</p>
                             </div>
                             <div className="flex items-center gap-2">
                               <button
@@ -1744,7 +2096,7 @@ export default function UserProfiles() {
                 )}
 
                 {superTab === 'usuarios' && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" role="tabpanel" id="super-tab-panel-usuarios">
                     <div>
                       <Label>Usuario sin empresa</Label>
                       <select value={assignUserId ?? ''} onChange={(e) => setAssignUserId(e.target.value ? Number(e.target.value) : null)} className={selectFieldClass}>
@@ -1772,7 +2124,7 @@ export default function UserProfiles() {
                 )}
 
                 {superTab === 'roles' && (
-                  <div className="space-y-2 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#334155] dark:bg-[#0f172a]/70">
+                  <div className="space-y-2 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#334155] dark:bg-[#0f172a]/70" role="tabpanel" id="super-tab-panel-roles">
                     <p className="text-xs text-gray-600 dark:text-gray-300">
                       Perfiles empresariales cargados: <span className="font-semibold">{roleProfiles.length}</span>.
                     </p>

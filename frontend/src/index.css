@@ -7,7 +7,10 @@ layer(base);
 
 @custom-variant dark (&:is(.dark *));
 
-/* Accessibility utilities */
+/* =========================================================================
+   Accessibility
+   ========================================================================= */
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -18,6 +21,56 @@ layer(base);
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.visually-hidden:not(:focus):not(:active) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Focus visible — only show focus ring for keyboard users, not mouse clicks */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid #cc785c;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Scroll margin for sticky header — prevents focus targets from being hidden */
+[id] {
+  scroll-margin-top: 80px;
+}
+
+:target {
+  scroll-margin-top: 80px;
+}
+
+/* Minimum target size for interactive elements (WCAG 2.2 2.5.8) */
+button,
+[role="button"],
+input[type="checkbox"] + label,
+input[type="radio"] + label,
+select,
+a[href]:not([tabindex="-1"]) {
+  min-height: 24px;
+  min-width: 24px;
+}
+
+/* System dark mode preference */
+@media (prefers-color-scheme: dark) {
+  html:not(.light) {
+    color-scheme: dark;
+  }
 }
 
 /* Alert animations */
@@ -951,7 +1004,7 @@ span.flatpickr-weekday,
   }
 }
 
-/* Respect reduced motion preference */
+/* Respect reduced motion preference (WCAG 2.2 2.3.3) */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -960,5 +1013,11 @@ span.flatpickr-weekday,
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :focus-visible {
+    transition: outline-offset 0.2s ease;
   }
 }

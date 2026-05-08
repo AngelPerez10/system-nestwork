@@ -11,6 +11,8 @@ import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import DatePicker from "@/components/form/date-picker";
 import { apiUrl, getAuthHeaders } from "@/config/api";
+import { MAX_FOTOS_POR_ORDEN } from "@/config/uploads";
+import { isOrdenPhotoStorageRef, uploadOrdenPhotoMultipart } from "@/utils/ordenPhotoUpload";
 import { PencilIcon, TrashBinIcon, TimeIcon } from "@/icons";
 import { MobileOrderList } from "./MobileOrderCard";
 import { ClienteFormModal } from "@/components/clientes/ClienteFormModal";
@@ -22,6 +24,7 @@ import { useOrdenesBootstrap } from "./useOrdenesBootstrap";
 import { createOrden, deleteOrden, listOrdenes, updateOrden } from "./ordenesApi";
 import { useOrdenesForm } from "./useOrdenesForm";
 import { OrdenFormModal } from "./OrdenFormModal";
+import { useAuth } from "@/context/AuthContext";
 
 const cardShellClass =
   "overflow-hidden rounded-3xl border border-[#e7ded0] bg-[#fffdfa]/95 shadow-[0_30px_80px_-40px_rgba(28,25,23,0.28)] backdrop-blur-sm dark:border-[#273244] dark:bg-[#111827]/80 dark:shadow-[0_30px_80px_-45px_rgba(0,0,0,0.55)]";
@@ -44,6 +47,7 @@ const getCurrentYearMonth = () => {
 
 export default function OrdenesTecnico() {
   const navigate = useNavigate();
+  const auth = useAuth();
 
   const formNonceRef = useRef(0);
   const formScrollRef = useRef<HTMLFormElement>(null);
@@ -80,12 +84,18 @@ export default function OrdenesTecnico() {
   const [isSaving, setIsSaving] = useState(false);
   const [tipoOrden, setTipoOrden] = useState<'servicio_tecnico' | 'levantamiento' | 'instalaciones' | 'mantenimiento'>('servicio_tecnico');
   const [editingOrden, setEditingOrden] = useState<Orden | null>(null);
+
+  const { formData, setFormData, resetForm } = useOrdenesForm({
+    defaultFirmaEncargadoUrl: mySignatureUrl || "",
+  });
+
   const isReadOnly = editingOrden ? !canOrdenesEdit : !canOrdenesCreate;
   const [searchTerm, setSearchTerm] = useState("");
   // Por defecto no filtramos por mes para no ocultar Ã³rdenes reciÃ©n creadas.
   const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentYearMonth());
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; index: number | null; url: string | null }>({ open: false, index: null, url: null });
   const [deletingPhoto, setDeletingPhoto] = useState(false);
+  const [photoDropAlert, setPhotoDropAlert] = useState<string | null>(null);
   // Filtros
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterStatus, setFilterStatus] = useState<'' | 'pendiente' | 'resuelto'>('');
@@ -159,45 +169,26 @@ export default function OrdenesTecnico() {
     fetchUsuarios();
   }, []);
 
-  const getPublicIdFromUrl = (url: string): string | null => {
-    try {
-      // Example: https://res.cloudinary.com/<cloud>/image/upload/v1234567/ordenes/fotos/abc123.jpg
-      const u = new URL(url);
-      const parts = u.pathname.split('/');
-      const uploadIdx = parts.findIndex(p => p === 'upload');
-      if (uploadIdx === -1) return null;
-      const after = parts.slice(uploadIdx + 1); // [v123456, ordenes, fotos, abc123.jpg]
-      // Drop version if present (starts with 'v' followed by digits)
-      const startIdx = after.length && /^v\d+$/i.test(after[0]) ? 1 : 0;
-      const pathParts = after.slice(startIdx);
-      if (!pathParts.length) return null;
-      const last = pathParts[pathParts.length - 1];
-      const dot = last.lastIndexOf('.');
-      pathParts[pathParts.length - 1] = dot > 0 ? last.substring(0, dot) : last;
-      return pathParts.join('/');
-    } catch {
-      return null;
-    }
-  };
-
-  const handleDeletePhoto = async (index: number, url: string) => {
+  const handleDeletePhoto = async (index: number) => {
     const nonce = formNonceRef.current;
-    const publicId = getPublicIdFromUrl(url);
-    const updated = (Array.isArray(formData.fotos_urls) ? formData.fotos_urls : []).filter((_, i) => i !== index);
+    const prevRefs = Array.isArray(formData.fotos_refs) ? formData.fotos_refs : [];
+    const prevUrls = Array.isArray(formData.fotos_urls) ? formData.fotos_urls : [];
+    const removedRef = prevRefs[index];
+    const updatedRefs = prevRefs.filter((_, i) => i !== index);
+    const updatedUrls = prevUrls.filter((_, i) => i !== index);
+
     setDeletingPhoto(true);
     try {
-      // Eliminar de Cloudinary
-      if (publicId) {
+      if (removedRef && isOrdenPhotoStorageRef(removedRef)) {
         await fetch(apiUrl('/api/ordenes/delete-image/'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             ...getAuthHeaders(),
           },
-          body: JSON.stringify({ public_id: publicId }),
+          body: JSON.stringify({ key: removedRef }),
         });
       }
-      // Si estamos editando una orden existente, actualizar solo fotos_urls en backend
       if (editingOrden && editingOrden.id) {
         const response = await fetch(apiUrl(`/api/ordenes/${editingOrden.id}/update-photos/`), {
           method: 'PATCH',
@@ -205,25 +196,32 @@ export default function OrdenesTecnico() {
             'Content-Type': 'application/json',
             ...getAuthHeaders(),
           },
-          body: JSON.stringify({ fotos_urls: updated }),
+          body: JSON.stringify({ fotos_refs: updatedRefs }),
         });
 
         if (response.ok) {
-          const updatedOrden = await response.json();
-          // Actualizar el estado editingOrden con los datos actualizados
+          const updatedOrden = (await response.json()) as Orden & { fotos_refs?: string[] };
           setEditingOrden(updatedOrden);
-          // Recargar lista de Ã³rdenes para reflejar el cambio
           await fetchOrdenes();
+          if (formNonceRef.current === nonce) {
+            setFormData((prev) => ({
+              ...prev,
+              fotos_refs: Array.isArray(updatedOrden.fotos_refs) ? updatedOrden.fotos_refs : updatedRefs,
+              fotos_urls: Array.isArray(updatedOrden.fotos_urls) ? updatedOrden.fotos_urls : updatedUrls,
+            }));
+          }
         } else {
           console.error('Error al actualizar fotos en backend:', await response.text());
+          if (formNonceRef.current === nonce) {
+            setFormData((prev) => ({ ...prev, fotos_refs: updatedRefs, fotos_urls: updatedUrls }));
+          }
         }
+      } else if (formNonceRef.current === nonce) {
+        setFormData((prev) => ({ ...prev, fotos_refs: updatedRefs, fotos_urls: updatedUrls }));
       }
     } catch (e) {
       console.error('Error al eliminar foto:', e);
     } finally {
-      if (formNonceRef.current === nonce) {
-        setFormData((prev) => ({ ...prev, fotos_urls: updated }));
-      }
       setConfirmDelete({ open: false, index: null, url: null });
       setDeletingPhoto(false);
     }
@@ -242,133 +240,56 @@ export default function OrdenesTecnico() {
     return Math.round(n * 100) / 100;
   };
 
-  const compressImage = async (
-    file: File,
-    maxSizeKB: number,
-    maxWidth: number = 1400,
-    maxHeight: number = 1400
-  ): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let { width, height } = img;
-          if (width > maxWidth || height > maxHeight) {
-            const ratio = Math.min(maxWidth / width, maxHeight / height);
-            width = Math.floor(width * ratio);
-            height = Math.floor(height * ratio);
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          // Evita fondos negros al convertir imÃ¡genes con transparencia a JPEG.
-          if (ctx) {
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, width, height);
-          }
-          ctx?.drawImage(img, 0, 0, width, height);
-          
-          // BÃºsqueda binaria para encontrar la calidad Ã³ptima mÃ¡s rÃ¡pido
-          let minQuality = 0.1;
-          let maxQuality = 0.95;
-          let attempts = 0;
-          const maxAttempts = 8;
-          
-          const binarySearchCompress = (low: number, high: number) => {
-            if (attempts >= maxAttempts || high - low < 0.01) {
-              const finalQuality = (low + high) / 2;
-              canvas.toBlob(
-                (blob) => {
-                  if (!blob) {
-                    reject(new Error('Error al comprimir la imagen'));
-                    return;
-                  }
-                  const r = new FileReader();
-                  r.readAsDataURL(blob);
-                  r.onloadend = () => resolve(r.result as string);
-                },
-                'image/jpeg',
-                finalQuality
-              );
-              return;
-            }
-            
-            attempts++;
-            const midQuality = (low + high) / 2;
-            canvas.toBlob(
-              (blob) => {
-                if (!blob) {
-                  reject(new Error('Error al comprimir la imagen'));
-                  return;
-                }
-                const sizeKB = blob.size / 1024;
-                if (Math.abs(sizeKB - maxSizeKB) < 5) {
-                  const r = new FileReader();
-                  r.readAsDataURL(blob);
-                  r.onloadend = () => resolve(r.result as string);
-                } else if (sizeKB > maxSizeKB) {
-                  binarySearchCompress(low, midQuality);
-                } else {
-                  binarySearchCompress(midQuality, high);
-                }
-              },
-              'image/jpeg',
-              midQuality
-            );
-          };
-          
-          binarySearchCompress(minQuality, maxQuality);
-        };
-        img.onerror = () => reject(new Error('Error al cargar la imagen'));
-      };
-      reader.onerror = () => reject(new Error('Error al leer el archivo'));
-    });
-  };
+  const fotoSlotCount = Math.max(
+    Array.isArray(formData.fotos_refs) ? formData.fotos_refs.length : 0,
+    Array.isArray(formData.fotos_urls) ? formData.fotos_urls.length : 0,
+  );
+  const photosFull = fotoSlotCount >= MAX_FOTOS_POR_ORDEN;
 
   const onDropPhotos = async (acceptedFiles: File[]) => {
     const nonce = formNonceRef.current;
-    const current = Array.isArray(formData.fotos_urls) ? formData.fotos_urls : [];
-    const remainingSlots = 5 - current.length;
-    if (remainingSlots <= 0) return;
-    const files = acceptedFiles.slice(0, remainingSlots).filter(f => f.type.startsWith('image/'));
+    const nRefs = Array.isArray(formData.fotos_refs) ? formData.fotos_refs.length : 0;
+    const nUrls = Array.isArray(formData.fotos_urls) ? formData.fotos_urls.length : 0;
+    const fotoCount = Math.max(nRefs, nUrls);
+    const remainingSlots = MAX_FOTOS_POR_ORDEN - fotoCount;
 
-    const uploadOne = async (file: File): Promise<string | null> => {
-      try {
-        const compressed = await compressImage(file, 80, 1400, 1400);
-        const resp = await fetch(apiUrl('/api/ordenes/upload-image/'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({ data_url: compressed, folder: 'ordenes/fotos' }),
-        });
-        if (!resp.ok) return null;
-        const data = await resp.json().catch(() => null);
-        return data?.url ? String(data.url) : null;
-      } catch {
-        return null;
-      }
-    };
+    const files = acceptedFiles.filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
 
-    const concurrency = 5;
-    const urls: string[] = [];
-    for (let i = 0; i < files.length; i += concurrency) {
-      const chunk = files.slice(i, i + concurrency);
+    if (remainingSlots <= 0) {
+      setPhotoDropAlert('Solo puedes subir hasta 3 fotos.');
+      window.setTimeout(() => setPhotoDropAlert(null), 5000);
+      return;
+    }
+
+    if (files.length > remainingSlots) {
+      setPhotoDropAlert('Solo puedes subir hasta 3 fotos.');
+      window.setTimeout(() => setPhotoDropAlert(null), 5000);
+    }
+
+    const toUpload = files.slice(0, remainingSlots);
+
+    const uploadOne = async (file: File) => uploadOrdenPhotoMultipart(file, 'ordenes/fotos');
+
+    const concurrency = 3;
+    const pairs: { url: string; key: string }[] = [];
+    for (let i = 0; i < toUpload.length; i += concurrency) {
+      const chunk = toUpload.slice(i, i + concurrency);
       const results = await Promise.allSettled(chunk.map(uploadOne));
       for (const r of results) {
-        if (r.status === 'fulfilled' && r.value) urls.push(r.value);
+        if (r.status === 'fulfilled' && r.value) pairs.push(r.value);
       }
     }
 
-    if (urls.length && formNonceRef.current === nonce) {
+    if (pairs.length && formNonceRef.current === nonce) {
       setFormData((prev) => {
-        const prevCurrent = Array.isArray(prev.fotos_urls) ? prev.fotos_urls : [];
-        return { ...prev, fotos_urls: [...prevCurrent, ...urls] };
+        const prevRefs = Array.isArray(prev.fotos_refs) ? prev.fotos_refs : [];
+        const prevUrls = Array.isArray(prev.fotos_urls) ? prev.fotos_urls : [];
+        return {
+          ...prev,
+          fotos_refs: [...prevRefs, ...pairs.map((p) => p.key)],
+          fotos_urls: [...prevUrls, ...pairs.map((p) => p.url)],
+        };
       });
     }
   };
@@ -376,7 +297,8 @@ export default function OrdenesTecnico() {
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: onDropPhotos,
     multiple: true,
-    maxFiles: 5,
+    disabled: photosFull,
+    maxFiles: MAX_FOTOS_POR_ORDEN,
     accept: {
       'image/png': [],
       'image/jpeg': [],
@@ -401,11 +323,6 @@ export default function OrdenesTecnico() {
     title: string;
     message: string;
   }>({ show: false, variant: "success", title: "", message: "" });
-
-  const { formData, setFormData, resetForm } = useOrdenesForm({
-    defaultFirmaEncargadoUrl: mySignatureUrl || "",
-  });
-
 
   // Estado para modal de mapa
   const [showMapModal, setShowMapModal] = useState(false);
@@ -655,10 +572,7 @@ export default function OrdenesTecnico() {
         let rows = apiRows;
 
         // Filter for technicians if not admin
-        const role = (localStorage.getItem('role') || sessionStorage.getItem('role') || '').toLowerCase();
-        const isSuperuser =
-          (localStorage.getItem('is_superuser') || sessionStorage.getItem('is_superuser') || '').toLowerCase() === 'true';
-        const isAdminRole = role === 'admin' || role === 'superadmin' || isSuperuser;
+        const isAdminRole = auth.isAdmin || auth.isSuperadmin;
         const userRaw = localStorage.getItem('user');
         if (!isAdminRole && userRaw) {
           try {
@@ -728,6 +642,8 @@ export default function OrdenesTecnico() {
       // Firma del encargado se maneja desde el perfil del usuario (no enviar base64 desde Ã³rdenes)
       delete payload.firma_encargado_url;
       delete payload.contacto_id;
+      delete payload.fotos_urls;
+      if (!Array.isArray(payload.fotos_refs)) payload.fotos_refs = [];
       if (payload.tecnico_asignado == null) {
         delete payload.tecnico_asignado;
       }
@@ -954,10 +870,7 @@ export default function OrdenesTecnico() {
         }
 
         if (savedOrden && savedOrden.id) {
-          const role = (localStorage.getItem('role') || sessionStorage.getItem('role') || '').toLowerCase();
-          const isSuperuser =
-            (localStorage.getItem('is_superuser') || sessionStorage.getItem('is_superuser') || '').toLowerCase() === 'true';
-          const isAdminRole = role === 'admin' || role === 'superadmin' || isSuperuser;
+          const isAdminRole = auth.isAdmin || auth.isSuperadmin;
           const userRaw = localStorage.getItem('user');
           let canShow = true;
           if (!isAdminRole && userRaw) {
@@ -1121,7 +1034,10 @@ export default function OrdenesTecnico() {
       quien_entrego: (orden as any).quien_entrego ? Number((orden as any).quien_entrego) : null,
       firma_encargado_url: mySignatureUrl || orden.firma_encargado_url || "",
       firma_cliente_url: orden.firma_cliente_url || "",
-      fotos_urls: Array.isArray(orden.fotos_urls) ? orden.fotos_urls : []
+      fotos_urls: Array.isArray(orden.fotos_urls) ? orden.fotos_urls : [],
+      fotos_refs: Array.isArray((orden as Orden & { fotos_refs?: string[] }).fotos_refs)
+        ? (orden as Orden & { fotos_refs?: string[] }).fotos_refs!
+        : [],
     });
     setShowModal(true);
   };
@@ -2653,16 +2569,31 @@ export default function OrdenesTecnico() {
                   />
                 </div>
 
+                <p className="text-sm text-gray-700 dark:text-gray-300" aria-live="polite">
+                  Fotos {fotoSlotCount}/{MAX_FOTOS_POR_ORDEN}
+                </p>
+                {photoDropAlert ? (
+                  <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+                    {photoDropAlert}
+                  </div>
+                ) : null}
+                {!isReadOnly && photosFull ? (
+                  <p role="status" className="text-xs text-gray-600 dark:text-gray-400">
+                    Límite de fotos alcanzado. Elimina una para subir otra.
+                  </p>
+                ) : null}
+
                 {/* Subida de Fotos - Dropzone con dz-message */}
                 {!isReadOnly && (
-                  <div className="transition border border-gray-300 border-dashed cursor-pointer dark:hover:border-[#ffa057] dark:border-[#334155] rounded-lg hover:border-[#ff801f]">
+                  <div className={`transition border border-gray-300 border-dashed rounded-lg hover:border-[#ff801f] dark:border-[#334155] ${photosFull ? 'cursor-not-allowed opacity-60' : 'cursor-pointer dark:hover:border-[#ffa057]'}`}>
                     <div
                       {...getRootProps()}
                       className={`dropzone rounded-lg border-dashed border-gray-300 p-4 sm:p-5 ${isDragActive ? "border-[#ff801f] bg-[#ff801f]/10 dark:bg-[#ff801f]/15" : "border-gray-300 bg-gray-50 dark:border-[#334155] dark:bg-[#0f172a]"
                         }`}
                       id="fotos-upload"
                       role="button"
-                      tabIndex={0}
+                      tabIndex={photosFull ? -1 : 0}
+                      aria-disabled={photosFull}
                     >
                       {/* Input oculto */}
                       <input {...getInputProps()} />
@@ -2689,7 +2620,11 @@ export default function OrdenesTecnico() {
 
                         {/* Contenido de texto */}
                         <h4 className="mb-1 font-semibold text-gray-800 text-sm sm:text-base dark:text-white/90">
-                          {isDragActive ? "Suelta aquÃ­ para subir" : "Haz clic o arrastra imÃ¡genes (mÃ¡x. 5)"}
+                          {photosFull
+                            ? 'Máximo de fotos alcanzado'
+                            : isDragActive
+                              ? 'Suelta aquí para subir'
+                              : `Haz clic o arrastra imágenes (máx. ${MAX_FOTOS_POR_ORDEN})`}
                         </h4>
 
                         <span className="text-center mb-2 block w-full max-w-[320px] text-[12px] text-gray-700 dark:text-gray-400">
@@ -2714,8 +2649,9 @@ export default function OrdenesTecnico() {
                           <button
                             type="button"
                             onClick={() => setConfirmDelete({ open: true, index, url: preview })}
-                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center bg-error-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-error-700"
+                            className="absolute top-1 right-1 min-h-6 min-w-6 h-6 w-6 flex items-center justify-center bg-error-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-error-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ff801f]"
                             title="Eliminar imagen"
+                            aria-label={`Eliminar foto ${index + 1}`}
                           >
                             <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
                               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -2773,8 +2709,8 @@ export default function OrdenesTecnico() {
                         type="button"
                         disabled={deletingPhoto}
                         onClick={() => {
-                          if (confirmDelete.index != null && confirmDelete.url) {
-                            void handleDeletePhoto(confirmDelete.index, confirmDelete.url);
+                          if (confirmDelete.index != null) {
+                            void handleDeletePhoto(confirmDelete.index);
                           }
                         }}
                         className="inline-flex items-center justify-center gap-2 rounded-lg bg-error-600 px-4 py-2 text-sm font-medium text-white hover:bg-error-700 disabled:opacity-60 disabled:cursor-not-allowed"

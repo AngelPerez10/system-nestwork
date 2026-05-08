@@ -11,6 +11,7 @@ import { ThemeProvider } from "./context/ThemeContext.tsx";
 import { AuthProvider } from "./context/AuthContext.tsx";
 import { AlertProvider } from "./context/AlertContext.tsx";
 import AlertContainer from "./components/common/AlertContainer.tsx";
+import ScreenReaderAnnouncer from "./components/common/ScreenReaderAnnouncer.tsx";
 import { installApi401UnauthorizedHandler } from "./utils/authSession";
 
 // Install global 401 handler for cookie-based auth
@@ -23,10 +24,12 @@ createRoot(document.getElementById("root")!).render(
         <Router>
           <AuthProvider>
             <AlertProvider>
-              <AlertContainer />
-              <AppWrapper>
-                <App />
-              </AppWrapper>
+              <ScreenReaderAnnouncer>
+                <AlertContainer />
+                <AppWrapper>
+                  <App />
+                </AppWrapper>
+              </ScreenReaderAnnouncer>
             </AlertProvider>
           </AuthProvider>
         </Router>

@@ -19,7 +19,6 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // This code will only run on the client side
     const savedTheme = localStorage.getItem("theme") as Theme | null;
     const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
     const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
@@ -38,6 +37,20 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     }
   }, [theme, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    const mql = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!mql) return;
+    const handler = (e: MediaQueryListEvent) => {
+      const hasManual = !!localStorage.getItem("theme");
+      if (!hasManual) {
+        setTheme(e.matches ? "dark" : "light");
+      }
+    };
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, [isInitialized]);
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === "light" ? "dark" : "light"));

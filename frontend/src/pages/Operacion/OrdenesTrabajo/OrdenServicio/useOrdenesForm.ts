@@ -22,7 +22,10 @@ export interface OrdenFormData {
   quien_entrego: number | null;
   firma_encargado_url: string;
   firma_cliente_url: string;
+  /** URLs firmadas o data URLs para <img src> */
   fotos_urls: string[];
+  /** Claves R2 u otros refs persistidos en backend (paralelo a fotos_urls). */
+  fotos_refs: string[];
 }
 
 interface UseOrdenesFormParams {
@@ -52,6 +55,7 @@ export const createEmptyOrdenFormData = (defaultFirmaEncargadoUrl = ""): OrdenFo
   firma_encargado_url: defaultFirmaEncargadoUrl,
   firma_cliente_url: "",
   fotos_urls: [],
+  fotos_refs: [],
 });
 
 export function useOrdenesForm({ defaultFirmaEncargadoUrl = "" }: UseOrdenesFormParams = {}) {

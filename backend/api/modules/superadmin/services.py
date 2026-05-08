@@ -16,7 +16,7 @@ def list_companies() -> list[dict[str, Any]]:
     with schema_context("public"):
         orgs = (
             Organization.objects.annotate(
-                users_count=models.Count("organizationuser"),
+                users_count=models.Count("memberships"),
             )
             .order_by("-created_on")
         )
@@ -39,7 +39,7 @@ def get_company_detail(company_id: int) -> dict[str, Any] | None:
         try:
             org = (
                 Organization.objects.annotate(
-                    users_count=models.Count("organizationuser"),
+                    users_count=models.Count("memberships"),
                 )
                 .get(pk=company_id)
             )

@@ -6,9 +6,10 @@ interface LabelProps {
   htmlFor?: string;
   children: ReactNode;
   className?: string;
+  required?: boolean;
 }
 
-const Label: FC<LabelProps> = ({ htmlFor, children, className }) => {
+const Label: FC<LabelProps> = ({ htmlFor, children, className, required }) => {
   return (
     <label
       htmlFor={htmlFor}
@@ -20,6 +21,12 @@ const Label: FC<LabelProps> = ({ htmlFor, children, className }) => {
       )}
     >
       {children}
+      {required && (
+        <span aria-hidden="true" className="ml-1 text-error-500">*</span>
+      )}
+      {required && (
+        <span className="visually-hidden">(obligatorio)</span>
+      )}
     </label>
   );
 };

@@ -3,6 +3,7 @@ from django.db.models import Q
 
 from api.modules.users.services import get_or_create_profile, visible_users_queryset
 from api.permissions_data import default_permissions_for_user
+from api.utils.r2_storage import expand_photo_ref
 from MiEscritorio.tareas.models import Tarea
 
 User = get_user_model()
@@ -43,6 +44,8 @@ def serialize_tarea(tarea: Tarea) -> dict:
     full_name = ""
     if usuario:
         full_name = f"{(usuario.first_name or '').strip()} {(usuario.last_name or '').strip()}".strip()
+    raw_refs = tarea.fotos_urls if isinstance(tarea.fotos_urls, list) else []
+    refs = [str(x).strip() for x in raw_refs if isinstance(x, str) and str(x).strip()]
     return {
         "id": tarea.id,
         "usuario_asignado": usuario.id if usuario else None,
@@ -51,7 +54,8 @@ def serialize_tarea(tarea: Tarea) -> dict:
         "estado": tarea.estado,
         "orden": tarea.orden,
         "descripcion": tarea.descripcion or "",
-        "fotos_urls": tarea.fotos_urls if isinstance(tarea.fotos_urls, list) else [],
+        "fotos_refs": refs,
+        "fotos_urls": [expand_photo_ref(r) for r in refs],
         "fecha_creacion": tarea.fecha_creacion.isoformat() if tarea.fecha_creacion else "",
         "fecha_actualizacion": (
             tarea.fecha_actualizacion.isoformat() if tarea.fecha_actualizacion else ""

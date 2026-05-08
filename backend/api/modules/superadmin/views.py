@@ -2,31 +2,17 @@
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from api.modules.users.services import is_platform_superadmin
+from api.permissions import IsPlatformSuperadmin
 from api.modules.users.throttling import SuperadminRateThrottle
 from api.modules.superadmin import services as superadmin_services
 
 
-def _require_superadmin(request):
-    if not is_platform_superadmin(request.user):
-        return Response(
-            {"detail": "Solo super administradores pueden acceder."},
-            status=403,
-        )
-    return None
-
-
 @api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformSuperadmin])
 @throttle_classes([SuperadminRateThrottle])
 def superadmin_companies(request):
-    err = _require_superadmin(request)
-    if err:
-        return err
-
     if request.method == "GET":
         try:
             rows = superadmin_services.list_companies()
@@ -51,13 +37,9 @@ def superadmin_companies(request):
 
 
 @api_view(["GET", "PATCH", "DELETE"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformSuperadmin])
 @throttle_classes([SuperadminRateThrottle])
 def superadmin_company_detail(request, company_id: int):
-    err = _require_superadmin(request)
-    if err:
-        return err
-
     if request.method == "GET":
         company = superadmin_services.get_company_detail(company_id)
         if company is None:
@@ -84,13 +66,9 @@ def superadmin_company_detail(request, company_id: int):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformSuperadmin])
 @throttle_classes([SuperadminRateThrottle])
 def superadmin_assign_user(request):
-    err = _require_superadmin(request)
-    if err:
-        return err
-
     data = request.data if isinstance(request.data, dict) else {}
     user_id = data.get("user_id")
     company_id = data.get("company_id")
@@ -108,9 +86,7 @@ def superadmin_assign_user(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsPlatformSuperadmin])
+@throttle_classes([SuperadminRateThrottle])
 def superadmin_role_profiles(request):
-    err = _require_superadmin(request)
-    if err:
-        return err
     return Response([])

@@ -6,6 +6,7 @@ import Alert from "@/components/ui/alert/Alert";
 import { Modal } from "@/components/ui/modal";
 import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
 import { apiUrl, getAuthHeaders } from "@/config/api";
+import { useAuth } from "@/context/AuthContext";
 import { TrashBinIcon } from "@/icons";
 import DatePicker from "@/components/form/date-picker";
 
@@ -167,8 +168,8 @@ function PdfDocGlyph({ className }: { className?: string }) {
 }
 
 export default function ReportesPage() {
-  const role = (localStorage.getItem("role") || sessionStorage.getItem("role") || "").toLowerCase();
-  const isAdmin = role === "admin";
+  const auth = useAuth();
+  const isAdmin = auth.isAdmin || auth.isSuperadmin;
 
   const [permissions, setPermissions] = useState<any>(() => getPermissionsFromStorage());
   const canReportesView = permissions?.reportes?.view !== false;

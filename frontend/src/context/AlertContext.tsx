@@ -1,4 +1,5 @@
 import { createContext, useContext, useCallback, useState, type ReactNode } from 'react';
+import { announceToScreenReader } from '@/components/common/ScreenReaderAnnouncer';
 
 export type AlertVariant = 'success' | 'error' | 'warning' | 'info';
 
@@ -46,6 +47,11 @@ export function AlertProvider({ children }: { children: ReactNode }) {
       };
 
       setAlerts((prev) => [...prev, alert]);
+
+      announceToScreenReader(
+        `${data.title}: ${data.message}`,
+        data.variant === 'error' ? 'assertive' : 'polite'
+      );
 
       if (alert.duration && alert.duration > 0) {
         setTimeout(() => {

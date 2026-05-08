@@ -6,6 +6,8 @@ import Label from "@/components/form/Label";
 import Input from "@/components/form/input/InputField";
 import DatePicker from "@/components/form/date-picker";
 import { apiUrl, getAuthHeaders } from "@/config/api";
+import { MAX_FOTOS_POR_ORDEN } from "@/config/uploads";
+import { isOrdenPhotoStorageRef, uploadOrdenPhotoMultipart } from "@/utils/ordenPhotoUpload";
 import ActionSearchBar from "@/components/kokonutui/action-search-bar";
 import LevantamientoForm from "./LevantamientoForm";
 import SignaturePad from "@/components/ui/signature/SignaturePad";
@@ -64,6 +66,7 @@ const initialFormData = {
   firma_encargado_url: "",
   firma_cliente_url: "",
   fotos_urls: [] as string[],
+  fotos_refs: [] as string[],
 };
 
 export default function OrdenServicioModal({
@@ -101,6 +104,7 @@ export default function OrdenServicioModal({
     url: null,
   });
   const [deletingPhoto, setDeletingPhoto] = useState(false);
+  const [photoDropAlert, setPhotoDropAlert] = useState<string | null>(null);
   const formScrollRef = useRef<HTMLFormElement | null>(null);
   const formNonceRef = useRef(0);
   const levantamientoSnapshotRef = useRef<{ payload: any; dibujo_url: string; cerco_materiales?: any[] } | null>(null);
@@ -300,6 +304,7 @@ export default function OrdenServicioModal({
         firma_encargado_url: orden.firma_encargado_url ?? "",
         firma_cliente_url: orden.firma_cliente_url ?? "",
         fotos_urls: Array.isArray(orden.fotos_urls) ? orden.fotos_urls : [],
+        fotos_refs: Array.isArray(orden.fotos_refs) ? orden.fotos_refs : [],
       });
       setClienteSearch(orden.cliente ?? "");
       const tid = orden.tecnico_asignado != null ? Number(orden.tecnico_asignado) : null;
@@ -413,136 +418,59 @@ export default function OrdenServicioModal({
     setServicioSearch("");
   };
 
-  const compressImage = async (
-    file: File,
-    maxSizeKB: number,
-    maxWidth: number = 1400,
-    maxHeight: number = 1400
-  ): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          let { width, height } = img;
-          if (width > maxWidth || height > maxHeight) {
-            const ratio = Math.min(maxWidth / width, maxHeight / height);
-            width = Math.floor(width * ratio);
-            height = Math.floor(height * ratio);
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          if (ctx) {
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(0, 0, width, height);
-          }
-          ctx?.drawImage(img, 0, 0, width, height);
-
-          let minQuality = 0.1;
-          let maxQuality = 0.95;
-          let attempts = 0;
-          const maxAttempts = 8;
-
-          const binarySearchCompress = (low: number, high: number) => {
-            if (attempts >= maxAttempts || high - low < 0.01) {
-              const finalQuality = (low + high) / 2;
-              canvas.toBlob(
-                (blob) => {
-                  if (!blob) {
-                    reject(new Error("Error al comprimir la imagen"));
-                    return;
-                  }
-                  const r = new FileReader();
-                  r.readAsDataURL(blob);
-                  r.onloadend = () => resolve(r.result as string);
-                },
-                "image/jpeg",
-                finalQuality
-              );
-              return;
-            }
-
-            attempts++;
-            const midQuality = (low + high) / 2;
-            canvas.toBlob(
-              (blob) => {
-                if (!blob) {
-                  reject(new Error("Error al comprimir la imagen"));
-                  return;
-                }
-                const sizeKB = blob.size / 1024;
-                if (Math.abs(sizeKB - maxSizeKB) < 5) {
-                  const r = new FileReader();
-                  r.readAsDataURL(blob);
-                  r.onloadend = () => resolve(r.result as string);
-                } else if (sizeKB > maxSizeKB) {
-                  binarySearchCompress(low, midQuality);
-                } else {
-                  binarySearchCompress(midQuality, high);
-                }
-              },
-              "image/jpeg",
-              midQuality
-            );
-          };
-
-          binarySearchCompress(minQuality, maxQuality);
-        };
-        img.onerror = () => reject(new Error("Error al cargar la imagen"));
-      };
-      reader.onerror = () => reject(new Error("Error al leer el archivo"));
-    });
-  };
+  const fotoSlotCount = Math.max(
+    Array.isArray(formData.fotos_refs) ? formData.fotos_refs.length : 0,
+    Array.isArray(formData.fotos_urls) ? formData.fotos_urls.length : 0,
+  );
+  const photosFull = fotoSlotCount >= MAX_FOTOS_POR_ORDEN;
 
   const onDropPhotos = async (acceptedFiles: File[]) => {
     const nonce = formNonceRef.current;
-    const current = Array.isArray(formData.fotos_urls) ? formData.fotos_urls : [];
-    const remainingSlots = 5 - current.length;
-    if (remainingSlots <= 0) return;
-
-    const files = acceptedFiles.slice(0, remainingSlots).filter((f) => f.type.startsWith("image/"));
-    if (!files.length) return;
-
     const token = getToken();
     if (!token) return;
 
-    const uploadOne = async (file: File): Promise<string | null> => {
-      try {
-        const compressed = await compressImage(file, 80, 1400, 1400);
-        const resp = await fetch(apiUrl("/api/ordenes/upload-image/"), {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({ data_url: compressed, folder: "ordenes/fotos" }),
-        });
-        if (!resp.ok) return null;
-        const data = await resp.json().catch(() => null);
-        return data?.url ? String(data.url) : null;
-      } catch {
-        return null;
-      }
-    };
+    const nRefs = Array.isArray(formData.fotos_refs) ? formData.fotos_refs.length : 0;
+    const nUrls = Array.isArray(formData.fotos_urls) ? formData.fotos_urls.length : 0;
+    const fotoCount = Math.max(nRefs, nUrls);
+    const remainingSlots = MAX_FOTOS_POR_ORDEN - fotoCount;
 
-    const concurrency = 5;
-    const urls: string[] = [];
-    for (let i = 0; i < files.length; i += concurrency) {
-      const chunk = files.slice(i, i + concurrency);
+    const files = acceptedFiles.filter((f) => f.type.startsWith("image/"));
+    if (!files.length) return;
+
+    if (remainingSlots <= 0) {
+      setPhotoDropAlert("Solo puedes subir hasta 3 fotos.");
+      window.setTimeout(() => setPhotoDropAlert(null), 5000);
+      return;
+    }
+
+    if (files.length > remainingSlots) {
+      setPhotoDropAlert("Solo puedes subir hasta 3 fotos.");
+      window.setTimeout(() => setPhotoDropAlert(null), 5000);
+    }
+
+    const toUpload = files.slice(0, remainingSlots);
+
+    const uploadOne = async (file: File) => uploadOrdenPhotoMultipart(file, "ordenes/fotos");
+
+    const concurrency = 3;
+    const pairs: { url: string; key: string }[] = [];
+    for (let i = 0; i < toUpload.length; i += concurrency) {
+      const chunk = toUpload.slice(i, i + concurrency);
       const results = await Promise.allSettled(chunk.map(uploadOne));
       for (const r of results) {
-        if (r.status === "fulfilled" && r.value) urls.push(r.value);
+        if (r.status === "fulfilled" && r.value) pairs.push(r.value);
       }
     }
 
-    if (urls.length && formNonceRef.current === nonce) {
+    if (pairs.length && formNonceRef.current === nonce) {
       setFormData((prev) => {
-        const prevCurrent = Array.isArray(prev.fotos_urls) ? prev.fotos_urls : [];
-        return { ...prev, fotos_urls: [...prevCurrent, ...urls] };
+        const prevRefs = Array.isArray(prev.fotos_refs) ? prev.fotos_refs : [];
+        const prevUrls = Array.isArray(prev.fotos_urls) ? prev.fotos_urls : [];
+        return {
+          ...prev,
+          fotos_refs: [...prevRefs, ...pairs.map((p) => p.key)],
+          fotos_urls: [...prevUrls, ...pairs.map((p) => p.url)],
+        };
       });
     }
   };
@@ -550,7 +478,8 @@ export default function OrdenServicioModal({
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: onDropPhotos,
     multiple: true,
-    maxFiles: 5,
+    disabled: photosFull,
+    maxFiles: MAX_FOTOS_POR_ORDEN,
     accept: {
       "image/png": [],
       "image/jpeg": [],
@@ -559,63 +488,53 @@ export default function OrdenServicioModal({
     },
   });
 
-  const getPublicIdFromUrl = (url: string): string | null => {
-    try {
-      const u = new URL(url);
-      const pathParts = u.pathname.split("/").filter(Boolean);
-      const uploadIndex = pathParts.findIndex((p) => p === "upload");
-      if (uploadIndex === -1) return null;
-      const publicIdParts = pathParts.slice(uploadIndex + 2);
-      if (!publicIdParts.length) return null;
-      const last = publicIdParts[publicIdParts.length - 1];
-      const dot = last.lastIndexOf(".");
-      publicIdParts[publicIdParts.length - 1] = dot > 0 ? last.substring(0, dot) : last;
-      return publicIdParts.join("/");
-    } catch {
-      return null;
-    }
-  };
+  const handleDeletePhoto = async (index: number) => {
+    const prevRefs = Array.isArray(formData.fotos_refs) ? formData.fotos_refs : [];
+    const prevUrls = Array.isArray(formData.fotos_urls) ? formData.fotos_urls : [];
+    const removedRef = prevRefs[index];
+    const updatedRefs = prevRefs.filter((_, i) => i !== index);
+    const updatedUrls = prevUrls.filter((_, i) => i !== index);
 
-  const handleDeletePhoto = async (index: number, url: string) => {
-    const updated = (Array.isArray(formData.fotos_urls) ? formData.fotos_urls : []).filter((_, i) => i !== index);
     setDeletingPhoto(true);
     try {
-      const token = getToken();
-      const publicId = getPublicIdFromUrl(url);
-      if (publicId) {
+      if (removedRef && isOrdenPhotoStorageRef(removedRef)) {
         await fetch(apiUrl("/api/ordenes/delete-image/"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
-          body: JSON.stringify({ public_id: publicId }),
+          body: JSON.stringify({ key: removedRef }),
         });
       }
-      if (orden && orden.id) {
+      if (orden?.id) {
         const response = await fetch(apiUrl(`/api/ordenes/${orden.id}/update-photos/`), {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
-          body: JSON.stringify({ fotos_urls: updated }),
+          body: JSON.stringify({ fotos_refs: updatedRefs }),
         });
         if (response.ok) {
           const updatedOrden = await response.json().catch(() => null);
           if (updatedOrden) {
-            setFormData((prev) => ({ ...prev, fotos_urls: Array.isArray(updatedOrden.fotos_urls) ? updatedOrden.fotos_urls : updated }));
+            setFormData((prev) => ({
+              ...prev,
+              fotos_refs: Array.isArray(updatedOrden.fotos_refs) ? updatedOrden.fotos_refs : updatedRefs,
+              fotos_urls: Array.isArray(updatedOrden.fotos_urls) ? updatedOrden.fotos_urls : updatedUrls,
+            }));
           } else {
-            setFormData((prev) => ({ ...prev, fotos_urls: updated }));
+            setFormData((prev) => ({ ...prev, fotos_refs: updatedRefs, fotos_urls: updatedUrls }));
           }
         } else {
-          setFormData((prev) => ({ ...prev, fotos_urls: updated }));
+          setFormData((prev) => ({ ...prev, fotos_refs: updatedRefs, fotos_urls: updatedUrls }));
         }
       } else {
-        setFormData((prev) => ({ ...prev, fotos_urls: updated }));
+        setFormData((prev) => ({ ...prev, fotos_refs: updatedRefs, fotos_urls: updatedUrls }));
       }
     } catch {
-      setFormData((prev) => ({ ...prev, fotos_urls: updated }));
+      setFormData((prev) => ({ ...prev, fotos_refs: updatedRefs, fotos_urls: updatedUrls }));
     } finally {
       setConfirmDelete({ open: false, index: null, url: null });
       setDeletingPhoto(false);
@@ -760,6 +679,8 @@ export default function OrdenServicioModal({
       const payload: any = { ...formData };
       delete payload.firma_encargado_url;
       delete payload.contacto_id;
+      delete payload.fotos_urls;
+      if (!Array.isArray(payload.fotos_refs)) payload.fotos_refs = [];
       if (payload.tecnico_asignado == null) delete payload.tecnico_asignado;
       if (payload.quien_instalo == null) delete payload.quien_instalo;
       if (payload.quien_entrego == null) delete payload.quien_entrego;
@@ -1523,15 +1444,30 @@ export default function OrdenServicioModal({
                     />
                   </div>
 
+                  <p className="text-sm text-gray-700 dark:text-gray-300" aria-live="polite">
+                    Fotos {fotoSlotCount}/{MAX_FOTOS_POR_ORDEN}
+                  </p>
+                  {photoDropAlert ? (
+                    <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-200">
+                      {photoDropAlert}
+                    </div>
+                  ) : null}
+                  {photosFull ? (
+                    <p role="status" className="text-xs text-gray-600 dark:text-gray-400">
+                      Límite de fotos alcanzado. Elimina una para subir otra.
+                    </p>
+                  ) : null}
+
                   {/* Subida de Fotos - Dropzone con dz-message */}
-                  <div className="transition border border-gray-300 border-dashed cursor-pointer dark:hover:border-brand-500 dark:border-gray-700 rounded-lg hover:border-brand-500">
+                  <div className={`transition border border-gray-300 border-dashed rounded-lg hover:border-brand-500 dark:border-gray-700 ${photosFull ? "cursor-not-allowed opacity-60" : "cursor-pointer dark:hover:border-brand-500"}`}>
                     <div
                       {...getRootProps()}
                       className={`dropzone rounded-lg border-dashed border-gray-300 p-4 sm:p-5 ${isDragActive ? "border-brand-500 bg-gray-100 dark:bg-gray-800" : "border-gray-300 bg-gray-50 dark:border-gray-700 dark:bg-gray-900"
                         }`}
                       id="fotos-upload-levantamiento"
                       role="button"
-                      tabIndex={0}
+                      tabIndex={photosFull ? -1 : 0}
+                      aria-disabled={photosFull}
                     >
                       {/* Input oculto */}
                       <input {...getInputProps()} />
@@ -1552,7 +1488,11 @@ export default function OrdenServicioModal({
 
                         {/* Contenido de texto */}
                         <h4 className="mb-1 font-semibold text-gray-800 text-sm sm:text-base dark:text-white/90">
-                          {isDragActive ? "Suelta aquÃ­ para subir" : "Haz clic o arrastra imÃ¡genes (mÃ¡x. 5)"}
+                          {photosFull
+                            ? "Máximo de fotos alcanzado"
+                            : isDragActive
+                              ? "Suelta aquí para subir"
+                              : `Haz clic o arrastra imágenes (máx. ${MAX_FOTOS_POR_ORDEN})`}
                         </h4>
 
                         <span className="text-center mb-2 block w-full max-w-[320px] text-[12px] text-gray-700 dark:text-gray-400">
@@ -1579,8 +1519,9 @@ export default function OrdenServicioModal({
                           <button
                             type="button"
                             onClick={() => setConfirmDelete({ open: true, index, url: preview })}
-                            className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center bg-error-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-error-700"
+                            className="absolute top-1 right-1 min-h-6 min-w-6 h-6 w-6 flex items-center justify-center bg-error-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-error-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
                             title="Eliminar imagen"
+                            aria-label={`Eliminar foto ${index + 1}`}
                           >
                             <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
                               <path
@@ -1646,8 +1587,8 @@ export default function OrdenServicioModal({
                           type="button"
                           disabled={deletingPhoto}
                           onClick={() => {
-                            if (confirmDelete.index != null && confirmDelete.url) {
-                              void handleDeletePhoto(confirmDelete.index, confirmDelete.url);
+                            if (confirmDelete.index != null) {
+                              void handleDeletePhoto(confirmDelete.index);
                             }
                           }}
                           className="inline-flex items-center justify-center gap-2 rounded-lg bg-error-600 px-4 py-2 text-sm font-medium text-white hover:bg-error-700 disabled:opacity-60 disabled:cursor-not-allowed"

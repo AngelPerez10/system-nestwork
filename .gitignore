@@ -82,6 +82,7 @@ pytest-report.html
 
 # ---- AI Assistant Skills & Config (NO subir) ----
 .agents/
+.OpenCode/
 .cursor/
 Claude.md
 skills-lock.json

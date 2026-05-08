@@ -13,7 +13,7 @@ class SuperadminRateThrottle(UserRateThrottle):
     """
     Rate limiting para operaciones superadmin (crear empresas, asignar usuarios).
     """
-    rate = "20/hour"  # 20 operaciones por hora
+    scope = "superadmin"
 
 
 class SupportRequestThrottle(UserRateThrottle):

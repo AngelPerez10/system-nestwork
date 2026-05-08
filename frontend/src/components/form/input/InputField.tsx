@@ -36,6 +36,8 @@ const Input: FC<InputProps> = ({
   error = false,
   hint,
 }) => {
+  const errorId = hint && error ? `${id || name}-error` : undefined;
+
   let inputClasses = `h-11 w-full rounded-xl border appearance-none border-[#e2d9ca] bg-white px-4 py-2.5 text-sm text-[#1c1917] placeholder:text-[#78716c] shadow-none focus:outline-hidden focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:placeholder:text-[#8ea0b8] dark:focus:border-[#fb923c] dark:focus:ring-[#fb923c]/20 ${className}`;
 
   if (disabled) {
@@ -62,11 +64,15 @@ const Input: FC<InputProps> = ({
         step={step}
         disabled={disabled}
         required={required}
+        aria-invalid={error || undefined}
+        aria-describedby={errorId}
         className={inputClasses}
       />
 
       {hint && (
         <p
+          id={errorId}
+          role={error ? "alert" : undefined}
           className={`mt-1.5 text-xs ${
             error
               ? "text-error-500"

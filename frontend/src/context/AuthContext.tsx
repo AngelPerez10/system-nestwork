@@ -33,8 +33,6 @@ interface LoginResponse {
   platform_role?: string;
 }
 
-// Security: Tokens are now stored in httpOnly cookies, not in localStorage
-// This prevents XSS attacks from stealing tokens
 const AUTH_STORAGE_KEYS = {
   USERNAME: 'auth_username',
   EMAIL: 'auth_email',
@@ -43,59 +41,53 @@ const AUTH_STORAGE_KEYS = {
   PERMISSIONS: 'auth_permissions',
 } as const;
 
-const getStoredItem = (key: string): string | null => {
-  return localStorage.getItem(key) || sessionStorage.getItem(key);
-};
+const getStored = (key: string): string | null =>
+  localStorage.getItem(key) || sessionStorage.getItem(key);
 
-const setStoredItem = (key: string, value: string): void => {
+const setStored = (key: string, value: string): void => {
   localStorage.setItem(key, value);
   sessionStorage.setItem(key, value);
 };
 
-const removeStoredItem = (key: string): void => {
+const removeStored = (key: string): void => {
   localStorage.removeItem(key);
   sessionStorage.removeItem(key);
 };
 
-const getInitialAuthState = (): AuthState => {
-  const role = getStoredItem(AUTH_STORAGE_KEYS.ROLE) as AuthRole;
-  const isSuperadmin = getStoredItem(AUTH_STORAGE_KEYS.IS_SUPERADMIN) === 'true';
-  
-  return {
-    isAuthenticated: false,  // Will be determined by backend check
-    isLoading: true,
-    role: role || null,
-    isSuperadmin,
-    isAdmin: role === 'admin' || isSuperadmin,
-    username: getStoredItem(AUTH_STORAGE_KEYS.USERNAME),
-    email: getStoredItem(AUTH_STORAGE_KEYS.EMAIL),
-    user: null,
-    permissions: null,
-  };
+function determineRole(userData: Record<string, unknown>): AuthRole {
+  const platformRole = (userData.platform_role as string)?.toLowerCase();
+  if (platformRole === 'superadmin' || userData.is_superuser) return 'superadmin';
+  if (platformRole === 'admin_empresa' || userData.is_staff) return 'admin';
+  return 'tecnico';
+}
+
+const DEFAULT_AUTH_STATE: AuthState = {
+  isAuthenticated: false,
+  isLoading: true,
+  role: null,
+  isSuperadmin: false,
+  isAdmin: false,
+  username: null,
+  email: null,
+  user: null,
+  permissions: null,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 let authBootstrapInFlight = false;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [authState, setAuthState] = useState<AuthState>(getInitialAuthState);
+  const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
   const navigate = useNavigate();
 
   const login = async (data: LoginResponse) => {
-    const role = data.platform_role?.toLowerCase() === 'superadmin' || data.is_superuser
-      ? 'superadmin'
-      : data.role?.toLowerCase() === 'admin' || data.is_staff
-        ? 'admin'
-        : 'tecnico';
-
+    const role = determineRole(data);
     const isSuperadmin = role === 'superadmin';
 
-    // Security: Tokens are stored in httpOnly cookies by backend
-    // Only store non-sensitive user data in localStorage
-    setStoredItem(AUTH_STORAGE_KEYS.USERNAME, data.username);
-    setStoredItem(AUTH_STORAGE_KEYS.EMAIL, data.email);
-    setStoredItem(AUTH_STORAGE_KEYS.ROLE, role);
-    setStoredItem(AUTH_STORAGE_KEYS.IS_SUPERADMIN, String(isSuperadmin));
+    setStored(AUTH_STORAGE_KEYS.USERNAME, data.username);
+    setStored(AUTH_STORAGE_KEYS.EMAIL, data.email);
+    setStored(AUTH_STORAGE_KEYS.ROLE, role);
+    setStored(AUTH_STORAGE_KEYS.IS_SUPERADMIN, String(isSuperadmin));
 
     setAuthState({
       isAuthenticated: true,
@@ -111,38 +103,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // Call backend to blacklist tokens and clear cookies
     try {
       await fetch(apiUrl('/api/logout/'), {
         method: 'POST',
-        credentials: 'include',  // Send cookies
+        credentials: 'include',
       });
-    } catch (error) {
-      console.error('Logout error:', error);
+    } catch {
+      /* network error — clear session anyway */
     }
-    
-    // Clear all auth storage
-    Object.values(AUTH_STORAGE_KEYS).forEach(key => removeStoredItem(key));
-    
-    // Clear legacy keys
-    ['auth_token', 'token', 'refresh_token', 'username', 'user', 'is_superuser', 'role', 'permissions', 'permissions_fetched_at']
-      .forEach(key => {
-        localStorage.removeItem(key);
-        sessionStorage.removeItem(key);
-      });
 
-    setAuthState({
-      isAuthenticated: false,
-      isLoading: false,
-      role: null,
-      isSuperadmin: false,
-      isAdmin: false,
-      username: null,
-      email: null,
-      user: null,
-      permissions: null,
-    });
+    Object.values(AUTH_STORAGE_KEYS).forEach(removeStored);
+    clearClientAuthSession();
 
+    setAuthState({ ...DEFAULT_AUTH_STATE, isLoading: false });
     navigate('/signin', { replace: true });
   };
 
@@ -150,64 +123,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const response = await fetch(apiUrl('/api/token/refresh/'), {
         method: 'POST',
-        credentials: 'include',  // Send refresh token cookie
+        credentials: 'include',
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          await logout();
-        }
+        if (response.status === 401) await logout();
         return;
       }
 
-      setAuthState(prev => ({
-        ...prev,
-        isAuthenticated: true,
-      }));
-    } catch (error) {
-      console.error('Failed to refresh token:', error);
-      // Network / transport errors: do not clear session (same as /api/me/).
+      setAuthState(prev => ({ ...prev, isAuthenticated: true }));
+    } catch {
+      /* network error — keep current session, backend will reject if tokens expired */
     }
   };
 
   const hasPermission = (module: string, action: string): boolean => {
-    // Superadmins have all permissions
     if (authState.isSuperadmin) return true;
-    
-    // Admins have most permissions
     if (authState.isAdmin) return true;
-    
-    // For technicians, check permissions object
     if (authState.permissions && typeof authState.permissions === 'object') {
-      const modulePerms = authState.permissions[module as keyof typeof authState.permissions];
-      if (modulePerms && typeof modulePerms === 'object') {
-        return !!(modulePerms as Record<string, boolean>)[action];
-      }
+      const m = (authState.permissions as Record<string, unknown>)[module];
+      if (m && typeof m === 'object') return !!(m as Record<string, boolean>)[action];
     }
-    
     return false;
   };
 
-  // Check authentication status on mount and periodically
-  // Security: Tokens are in httpOnly cookies, so we check with backend
   useEffect(() => {
     let interval: number | null = null;
     const ME_POLL_MS = 5 * 60 * 1000;
 
-    const clearUnauthenticated = () => {
-      Object.values(AUTH_STORAGE_KEYS).forEach((key) => removeStoredItem(key));
+    const clearAndReset = () => {
+      Object.values(AUTH_STORAGE_KEYS).forEach(removeStored);
       clearClientAuthSession();
-      setAuthState(prev => ({
-        ...prev,
-        isAuthenticated: false,
-        isLoading: false,
-        role: null,
-        isSuperadmin: false,
-        isAdmin: false,
-        username: null,
-        email: null,
-        user: null,
-      }));
+      setAuthState({ ...DEFAULT_AUTH_STATE, isLoading: false });
       if (interval != null) {
         window.clearInterval(interval);
         interval = null;
@@ -215,21 +162,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const applyUserFromMe = (userData: Record<string, unknown>) => {
-      const role = (userData.platform_role as string | undefined)?.toLowerCase() === 'superadmin' || userData.is_superuser
-        ? 'superadmin'
-        : (userData.role as string | undefined)?.toLowerCase() === 'admin' || userData.is_staff
-          ? 'admin'
-          : 'tecnico';
-
+      const role = determineRole(userData);
       const isSuperadmin = role === 'superadmin';
 
-      setStoredItem(AUTH_STORAGE_KEYS.USERNAME, String(userData.username ?? ''));
-      setStoredItem(AUTH_STORAGE_KEYS.EMAIL, String(userData.email ?? ''));
-      setStoredItem(AUTH_STORAGE_KEYS.ROLE, role);
-      setStoredItem(AUTH_STORAGE_KEYS.IS_SUPERADMIN, String(isSuperadmin));
+      setStored(AUTH_STORAGE_KEYS.USERNAME, String(userData.username ?? ''));
+      setStored(AUTH_STORAGE_KEYS.EMAIL, String(userData.email ?? ''));
+      setStored(AUTH_STORAGE_KEYS.ROLE, role);
+      setStored(AUTH_STORAGE_KEYS.IS_SUPERADMIN, String(isSuperadmin));
 
-      setAuthState(prev => ({
-        ...prev,
+      setAuthState({
         isAuthenticated: true,
         isLoading: false,
         role,
@@ -238,26 +179,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         username: userData.username != null ? String(userData.username) : null,
         email: userData.email != null ? String(userData.email) : null,
         user: userData,
-      }));
+        permissions: null,
+      });
 
       if (interval == null) {
         interval = window.setInterval(checkAuth, ME_POLL_MS);
       }
     };
 
-    const tryRecoverSessionAfter401 = async (): Promise<boolean> => {
+    const tryRecoverAfter401 = async (): Promise<boolean> => {
       try {
-        const rRef = await fetch(apiUrl('/api/token/refresh/'), {
+        const refResp = await fetch(apiUrl('/api/token/refresh/'), {
           method: 'POST',
           credentials: 'include',
         });
-        if (!rRef.ok) return false;
-        const rMe = await fetch(apiUrl('/api/me/'), {
+        if (!refResp.ok) return false;
+        const meResp = await fetch(apiUrl('/api/me/'), {
           method: 'GET',
           credentials: 'include',
         });
-        if (!rMe.ok) return false;
-        const userData = await rMe.json() as Record<string, unknown>;
+        if (!meResp.ok) return false;
+        const userData = await meResp.json() as Record<string, unknown>;
         applyUserFromMe(userData);
         return true;
       } catch {
@@ -270,18 +212,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         authBootstrapInFlight = true;
 
-        if (typeof document !== 'undefined' && document.hidden && interval != null) {
-          return;
-        }
+        if (typeof document !== 'undefined' && document.hidden && interval != null) return;
 
         const onSignInPage = window.location.pathname === '/signin';
-        const hasStoredSessionHint = Boolean(
-          getStoredItem(AUTH_STORAGE_KEYS.USERNAME) ||
-          getStoredItem(AUTH_STORAGE_KEYS.ROLE) ||
-          getStoredItem(AUTH_STORAGE_KEYS.IS_SUPERADMIN)
-        );
-        if (onSignInPage && !hasStoredSessionHint) {
-          setAuthState(prev => ({ ...prev, isLoading: false, isAuthenticated: false }));
+        if (onSignInPage) {
+          setAuthState(prev => ({ ...prev, isLoading: false }));
           return;
         }
 
@@ -294,24 +229,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const userData = await response.json() as Record<string, unknown>;
           applyUserFromMe(userData);
         } else if (response.status === 401) {
-          const recovered = await tryRecoverSessionAfter401();
-          if (!recovered) {
-            clearUnauthenticated();
-          }
+          const recovered = await tryRecoverAfter401();
+          if (!recovered) clearAndReset();
         } else {
-          setAuthState(prev => ({
-            ...prev,
-            isLoading: false,
-            isAuthenticated: prev.isAuthenticated,
-          }));
+          clearAndReset();
         }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        setAuthState(prev => ({
-          ...prev,
-          isLoading: false,
-          isAuthenticated: prev.isAuthenticated,
-        }));
+      } catch {
+        // Network error — fail-closed: clear auth state to prevent stale sessions
+        clearAndReset();
       } finally {
         authBootstrapInFlight = false;
       }
