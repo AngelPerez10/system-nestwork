@@ -165,10 +165,10 @@ export default function SignInForm() {
         )}
 
         <div className="flex items-center justify-between">
-          <label className="flex cursor-pointer items-center gap-3">
+          <div className="flex cursor-pointer items-center gap-3">
             <Checkbox checked={remember} onChange={setRemember} className="checked:!bg-[#ff801f]" />
             <span className="block text-sm font-normal text-[#57534e] dark:text-[#b8c4d5]">Recordarme</span>
-          </label>
+          </div>
         </div>
 
         <Button

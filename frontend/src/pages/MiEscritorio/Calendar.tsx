@@ -7,6 +7,7 @@ import { EventInput } from "@fullcalendar/core";
 import esLocale from "@fullcalendar/core/locales/es";
 import PageMeta from "@/components/common/PageMeta";
 import { apiUrl, getAuthHeaders } from "@/config/api";
+import { useAuth } from "@/context/AuthContext";
 
 let calendarOrdenesInFlight: Promise<void> | null = null;
 
@@ -27,14 +28,6 @@ type Orden = {
   fecha_finalizacion?: string | null;
   fecha_creacion?: string | null;
   status?: "pendiente" | "resuelto" | string;
-};
-
-const getToken = (): string => {
-  return (
-    localStorage.getItem("auth_token") ||
-    sessionStorage.getItem("auth_token") ||
-    "cookie-session"
-  ).trim();
 };
 
 const addDays = (isoDate: string, days: number): string => {
@@ -80,16 +73,11 @@ const renderEventContent = (eventInfo: any) => {
 const Calendar: React.FC = () => {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const calendarRef = useRef<FullCalendar>(null);
+  const auth = useAuth();
 
   useEffect(() => {
     const loadOrdenes = async () => {
       try {
-        const token = getToken();
-        if (!token) {
-          setEvents([]);
-          return;
-        }
-
         if (calendarOrdenesInFlight) {
           await calendarOrdenesInFlight;
           return;
@@ -115,18 +103,11 @@ const Calendar: React.FC = () => {
               ? (data as any).results
               : [];
 
-          try {
-            const rawMe = localStorage.getItem("user") || sessionStorage.getItem("user");
-            const me = rawMe ? JSON.parse(rawMe) : null;
-            const isAdmin = !!(me?.is_superuser || me?.is_staff);
-            const meId = typeof me?.id === "number" ? me.id : me?.id ? Number(me.id) : null;
-            if (!isAdmin && meId != null) {
-              const filtered = rows.filter((o) => Number(o.tecnico_asignado) === Number(meId));
-              setEvents(filtered.map(orderToEvent).filter(Boolean) as CalendarEvent[]);
-              return;
-            }
-          } catch {
-            // ignore user parse errors and show all rows
+          if (!auth.isAdmin && auth.user && typeof (auth.user as any).id === 'number') {
+            const meId = (auth.user as any).id;
+            const filtered = rows.filter((o) => Number(o.tecnico_asignado) === Number(meId));
+            setEvents(filtered.map(orderToEvent).filter(Boolean) as CalendarEvent[]);
+            return;
           }
 
           setEvents(rows.map(orderToEvent).filter(Boolean) as CalendarEvent[]);
@@ -141,7 +122,7 @@ const Calendar: React.FC = () => {
     };
 
     loadOrdenes();
-  }, []);
+  }, [auth.isAdmin, auth.user]);
 
   return (
     <>
@@ -152,7 +133,7 @@ const Calendar: React.FC = () => {
 
       <div className="sn-calendar-shell space-y-6">
         <div className="overflow-hidden rounded-3xl border border-[#e7ded0] bg-[#fffdfa]/95 shadow-[0_24px_60px_-34px_rgba(28,25,23,0.2)] dark:border-[#273244] dark:bg-[#0f172a]/70">
-          <div className="custom-calendar pb-4">
+          <div className="custom-calendar pb-4" role="region" aria-label="Calendario de órdenes de trabajo" aria-roledescription="calendar">
             <FullCalendar
               ref={calendarRef}
               plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -176,6 +157,9 @@ const Calendar: React.FC = () => {
               noEventsText="No hay eventos para mostrar"
               events={events}
               eventContent={renderEventContent}
+              titleFormat={{ year: 'numeric', month: 'long' }}
+              navLinkDayClick={(date) => {/* keyboard accessible — FullCalendar handles Enter/Space */}}
+              navLinkWeekClick={(date) => {/* keyboard accessible */}}
             />
           </div>
         </div>

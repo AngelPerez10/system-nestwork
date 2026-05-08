@@ -32,6 +32,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const listboxId = `${label.replace(/\s+/g, '-')}-listbox`;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -120,6 +121,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
             className="w-full"
             role="combobox"
             aria-expanded={isOpen}
+            aria-controls={isOpen ? listboxId : undefined}
             aria-haspopup="listbox"
             aria-labelledby={`${label}-label`}
             aria-disabled={disabled}
@@ -213,8 +215,11 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
             <div
               className="absolute left-0 z-40 w-full overflow-y-auto bg-white rounded-lg shadow-sm top-full max-h-select dark:bg-gray-900"
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
               role="listbox"
+              id={listboxId}
               aria-label={label}
+              tabIndex={-1}
             >
               {options.map((option, index) => {
                 const isSelected = selectedOptions.includes(option.value);
@@ -227,8 +232,15 @@ const MultiSelect: React.FC<MultiSelectProps> = ({
                       isFocused ? "bg-primary/5" : ""
                     } ${isSelected ? "bg-primary/10" : ""}`}
                     onClick={() => handleSelect(option.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        handleSelect(option.value);
+                      }
+                    }}
                     role="option"
                     aria-selected={isSelected}
+                    tabIndex={-1}
                   >
                     <div className="relative flex w-full items-center p-2 pl-2">
                       <div className="mx-2 leading-6 text-gray-800 dark:text-white/90">

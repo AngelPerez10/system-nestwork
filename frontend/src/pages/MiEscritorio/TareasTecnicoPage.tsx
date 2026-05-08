@@ -1074,7 +1074,30 @@ export default function TareasTecnicoPage() {
                                         Fotos ({tarea.fotos_urls.length})
                                       </button>
                                     )}
-                                  </div>
+                                    <span className="hidden group-focus-within:flex group-hover:flex items-center gap-0.5 ml-auto" aria-hidden="true">
+                                      {col.key !== "TODO" && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMobileEstadoChange(tarea, col.key === "HECHO" ? "EN_PROGRESO" : "TODO")}
+                                          className="inline-flex items-center justify-center w-5 h-5 rounded-md hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 hover:text-[#3b9eff] dark:hover:text-[#3b9eff] transition-colors"
+                                          title="Mover atrás"
+                                          aria-label={`Mover "${tarea.descripcion?.slice(0, 20) || 'tarea'}" a la columna anterior`}
+                                        >
+                                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                                        </button>
+                                      )}
+                                      {col.key !== "HECHO" && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMobileEstadoChange(tarea, col.key === "TODO" ? "EN_PROGRESO" : "HECHO")}
+                                          className="inline-flex items-center justify-center w-5 h-5 rounded-md hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 hover:text-[#3b9eff] dark:hover:text-[#3b9eff] transition-colors"
+                                          title="Mover adelante"
+                                          aria-label={`Mover "${tarea.descripcion?.slice(0, 20) || 'tarea'}" a la columna siguiente`}
+                                        >
+                                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                        </button>
+                                      )}
+                                    </span>
                                 </div>
                               );
                             })}

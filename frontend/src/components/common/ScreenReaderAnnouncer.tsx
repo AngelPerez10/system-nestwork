@@ -7,6 +7,7 @@ interface ScreenReaderAnnouncerProps {
 let sharedSetPoliteness: ((politeness: "polite" | "assertive") => void) | null = null;
 let sharedSetMessage: ((message: string) => void) | null = null;
 
+/* eslint-disable-next-line react-refresh/only-export-components */
 export function announceToScreenReader(message: string, politeness: "polite" | "assertive" = "polite") {
   if (!message) return;
   sharedSetPoliteness?.(politeness);
