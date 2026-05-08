@@ -294,8 +294,6 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
         }
     };
 
-    const getToken = () => "cookie-session";
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setModalError("");
@@ -315,7 +313,6 @@ export const ClienteFormModal: React.FC<ClienteFormModalProps> = ({
         }
 
         setSaving(true);
-        const token = getToken();
         const url = editingCliente ? apiUrl(`/api/clientes/${editingCliente.id}/`) : apiUrl('/api/clientes/');
         const method = editingCliente ? 'PUT' : 'POST';
 

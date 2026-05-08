@@ -158,8 +158,8 @@ const Calendar: React.FC = () => {
               events={events}
               eventContent={renderEventContent}
               titleFormat={{ year: 'numeric', month: 'long' }}
-              navLinkDayClick={(date) => {/* keyboard accessible — FullCalendar handles Enter/Space */}}
-              navLinkWeekClick={(date) => {/* keyboard accessible */}}
+              navLinkDayClick={(_date) => {/* keyboard accessible — FullCalendar handles Enter/Space */}}
+              navLinkWeekClick={(_date) => {/* keyboard accessible */}}
             />
           </div>
         </div>

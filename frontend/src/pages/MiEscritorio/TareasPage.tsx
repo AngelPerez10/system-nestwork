@@ -1302,7 +1302,6 @@ export default function TareasPage() {
                                                                                             </button>
                                                                                         )}
                                                                                     </span>
-                                                                                    )}
                                                                                 </div>
                                                                             </div>
                                                                         );

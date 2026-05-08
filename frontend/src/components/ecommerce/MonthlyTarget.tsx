@@ -473,7 +473,7 @@ export default function MonthlyTarget() {
           const permsRows = await Promise.all(
             usersData.map(async (u: any) => {
               const r = await fetch(apiUrl(`/api/users/accounts/${u.id}/permissions/`), {
-                headers,
+                credentials: "include",
                 cache: "no-store" as RequestCache,
               });
               if (!r.ok) return null;

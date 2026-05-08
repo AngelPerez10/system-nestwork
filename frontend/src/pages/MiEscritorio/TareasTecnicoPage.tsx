@@ -208,7 +208,6 @@ export default function TareasTecnicoPage() {
     for (const file of files) {
       try {
         const compressed = await compressImage(file, 50, 1400, 1400);
-        const token = getToken();
         const resp = await fetch(apiUrl("/api/tareas/upload-image/"), {
           method: "POST",
           headers: {
@@ -244,7 +243,6 @@ export default function TareasTecnicoPage() {
     const publicId = getPublicIdFromUrl(url);
     const updated = (Array.isArray(formData.fotos_urls) ? formData.fotos_urls : []).filter((_, i) => i !== index);
     try {
-      const token = getToken();
       if (publicId) {
         await fetch(apiUrl("/api/tareas/delete-image/"), {
           method: "POST",
@@ -1098,6 +1096,7 @@ export default function TareasTecnicoPage() {
                                         </button>
                                       )}
                                     </span>
+                                  </div>
                                 </div>
                               );
                             })}

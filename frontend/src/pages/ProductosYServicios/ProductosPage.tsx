@@ -125,7 +125,7 @@ const loadManualProductsFromStorage = (): ManualProduct[] => {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((x): x is ManualProduct => Boolean(x) && typeof x === "object")
+      .filter((x): x is Record<string, unknown> => Boolean(x) && typeof x === "object")
       .map((x) => ({
         id: String(x.id || ""),
         imagen_url: String(x.imagen_url || ""),
@@ -133,7 +133,7 @@ const loadManualProductsFromStorage = (): ManualProduct[] => {
         caracteristicas: String(x.caracteristicas || ""),
         marca: String(x.marca || ""),
         modelo: String(x.modelo || ""),
-        fuente: "manual",
+        fuente: "manual" as const,
         precio: Number.isFinite(Number(x.precio)) ? Number(x.precio) : 0,
         stock: Number.isFinite(Number(x.stock)) ? Number(x.stock) : 0,
       }))

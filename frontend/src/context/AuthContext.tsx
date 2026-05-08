@@ -4,6 +4,7 @@ import { apiUrl } from '@/config/api';
 import { clearClientAuthSession } from '@/utils/authSession';
 
 export type AuthRole = 'superadmin' | 'admin' | 'tecnico' | null;
+type EffectiveAuthRole = Exclude<AuthRole, null>;
 
 export interface AuthState {
   isAuthenticated: boolean;
@@ -41,9 +42,6 @@ const AUTH_STORAGE_KEYS = {
   PERMISSIONS: 'auth_permissions',
 } as const;
 
-const getStored = (key: string): string | null =>
-  localStorage.getItem(key) || sessionStorage.getItem(key);
-
 const setStored = (key: string, value: string): void => {
   localStorage.setItem(key, value);
   sessionStorage.setItem(key, value);
@@ -54,7 +52,7 @@ const removeStored = (key: string): void => {
   sessionStorage.removeItem(key);
 };
 
-function determineRole(userData: Record<string, unknown>): AuthRole {
+function determineRole(userData: { platform_role?: string; is_superuser?: unknown; is_staff?: unknown }): EffectiveAuthRole {
   const platformRole = (userData.platform_role as string)?.toLowerCase();
   if (platformRole === 'superadmin' || userData.is_superuser) return 'superadmin';
   if (platformRole === 'admin_empresa' || userData.is_staff) return 'admin';
