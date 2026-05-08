@@ -24,7 +24,7 @@ djangorestframework-simplejwt==5.5.1
 # =============================================================================
 # psycopg2-binary 2.9.11 supports PostgreSQL 12 through 18
 # For production: consider psycopg2 (non-binary) or psycopg3
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.12
 
 # =============================================================================
 # UTILITIES
