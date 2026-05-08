@@ -52,7 +52,7 @@ mercadopago==2.2.3
 Pillow==12.2.0
 
 # Cloudflare R2 / S3-compatible object storage (tenant-scoped uploads)
-django-storages[s3]==1.14.4
+django-storages[s3]==1.14.6
 boto3==1.35.93
 
 # =============================================================================
