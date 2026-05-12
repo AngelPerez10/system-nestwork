@@ -13,20 +13,29 @@ if not SECRET_KEY:
     )
 
 
-def _render_service_hostname() -> str | None:
-    """Render sets RENDER and RENDER_EXTERNAL_URL (e.g. https://name.onrender.com)."""
+def _render_external_url_parts() -> tuple[str | None, str | None]:
+    """Render sets RENDER and RENDER_EXTERNAL_URL (e.g. https://name.onrender.com).
+
+    Returns (hostname, base_origin) for ALLOWED_HOSTS / CORS / CSRF defaults.
+    """
     if (os.environ.get("RENDER") or "").strip().lower() not in ("1", "true", "yes", "on"):
-        return None
+        return None, None
     url = (os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
     if not url:
-        return None
+        return None, None
     try:
-        return urlparse(url).hostname
+        p = urlparse(url)
+        host = p.hostname
+        if p.scheme in ("http", "https") and p.netloc:
+            origin = f"{p.scheme}://{p.netloc}".rstrip("/")
+        else:
+            origin = None
+        return host, origin
     except Exception:
-        return None
+        return None, None
 
 
-_rh = _render_service_hostname()
+_rh, _render_base_origin = _render_external_url_parts()
 if _rh:
     _hosts = list(ALLOWED_HOSTS)
     if _rh not in _hosts:
@@ -73,19 +82,32 @@ SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"  # Security: Prevent popup att
 # CSP: Upgrade HTTP to HTTPS in production
 CSP_UPGRADE_INSECURE = True
 
+# On Render, bootstrap CORS/CSRF from the service URL if env is unset (no wildcards).
+if _render_base_origin:
+    _cors = list(CORS_ALLOWED_ORIGINS) if CORS_ALLOWED_ORIGINS else []
+    if _render_base_origin not in _cors:
+        _cors.append(_render_base_origin)
+    CORS_ALLOWED_ORIGINS = _cors
+
 if not CORS_ALLOWED_ORIGINS:
     raise ValueError(
-        "Production requires CORS_ALLOWED_ORIGINS (exact frontend origins), not wildcards."
+        "Production requires CORS_ALLOWED_ORIGINS (exact frontend origins), not wildcards. "
+        "On Render, set CORS_ALLOWED_ORIGINS or ensure RENDER_EXTERNAL_URL is set."
     )
 
 CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+if _render_base_origin:
+    _csrf = list(CSRF_TRUSTED_ORIGINS)
+    if _render_base_origin not in _csrf:
+        _csrf.append(_render_base_origin)
+    CSRF_TRUSTED_ORIGINS = _csrf
+
 if not CSRF_TRUSTED_ORIGINS:
     raise ValueError(
         "Production requires CSRF_TRUSTED_ORIGINS. "
         "Set the exact frontend origin URLs (e.g., ['https://app.nestwork.mx']). "
+        "On Render, set CSRF_TRUSTED_ORIGINS or ensure RENDER_EXTERNAL_URL is set. "
         "This prevents CSRF attacks on cookie-based auth endpoints."
     )
 
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
-
-SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
