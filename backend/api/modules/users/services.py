@@ -4,9 +4,10 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.db import connection
+from django.db.utils import OperationalError, ProgrammingError
 
 from api.permissions_data import default_permissions_for_user
-from organizations.models import OrganizationUser
+from organizations.models import OrganizationUser, PublicAuthAuditEvent
 from workspace.models import SecurityAuditEvent, UserProfile
 
 User = get_user_model()
@@ -65,11 +66,47 @@ def user_account_dict(user, profile: UserProfile | None = None):
     }
 
 
-def get_or_create_profile(user) -> UserProfile:
-    profile, created = UserProfile.objects.get_or_create(
-        user=user,
-        defaults={"permissions": default_permissions_for_user(user)},
+def _synthetic_public_profile(user) -> UserProfile:
+    """
+    workspace.* lives in tenant schemas only; on public (e.g. API host before any Domain row)
+    UserProfile rows do not exist. Return an unsaved profile for reads (login payload, role checks).
+    """
+    desired_role = (
+        UserProfile.PlatformRole.SUPERADMIN
+        if user.is_superuser
+        else UserProfile.PlatformRole.ADMIN_EMPRESA
+        if user.is_staff
+        else UserProfile.PlatformRole.TECNICO
     )
+    return UserProfile(
+        user=user,
+        platform_role=desired_role,
+        permissions=default_permissions_for_user(user),
+    )
+
+
+def get_or_create_profile(user) -> UserProfile:
+    """
+    Persisted profile in tenant (and in public only if workspace tables exist there).
+    """
+    schema = tenant_schema_name()
+    try:
+        profile, created = UserProfile.objects.get_or_create(
+            user=user,
+            defaults={"permissions": default_permissions_for_user(user)},
+        )
+    except (ProgrammingError, OperationalError):
+        if schema != "public":
+            raise
+        logger.info(
+            "UserProfile: using in-memory profile on public schema (workspace is tenant-only); "
+            "user_id=%s username=%s",
+            getattr(user, "pk", None),
+            getattr(user, "username", ""),
+            extra={"security": "public_schema_profile_fallback", "user_id": getattr(user, "pk", None)},
+        )
+        return _synthetic_public_profile(user)
+
     desired_role = (
         UserProfile.PlatformRole.SUPERADMIN
         if user.is_superuser
@@ -174,11 +211,30 @@ def audit_security_event(
     ip_address: str | None = None,
     metadata: dict | None = None,
 ):
-    SecurityAuditEvent.objects.create(
-        actor=actor if getattr(actor, "is_authenticated", False) else None,
-        action=action[:120],
-        target_user_id=target_user_id,
-        schema_name=(schema_name or tenant_schema_name())[:63],
-        ip_address=ip_address,
-        metadata=metadata or {},
-    )
+    schema = tenant_schema_name()
+    actor_user = actor if getattr(actor, "is_authenticated", False) else None
+    resolved_schema = (schema_name or schema)[:63]
+    meta = metadata or {}
+    payload = {
+        "actor": actor_user,
+        "action": action[:120],
+        "target_user_id": target_user_id,
+        "schema_name": resolved_schema,
+        "ip_address": ip_address,
+        "metadata": meta,
+    }
+    try:
+        SecurityAuditEvent.objects.create(**payload)
+        return
+    except (ProgrammingError, OperationalError):
+        if schema != "public":
+            raise
+    # Tenant-only workspace table: persist same audit fields in public (SHARED_APPS).
+    try:
+        PublicAuthAuditEvent.objects.create(**payload)
+    except Exception:
+        logger.exception(
+            "PublicAuthAuditEvent persistence failed (schema=public); refusing silent drop",
+            extra={"security": "public_auth_audit_failure", "action": action[:120]},
+        )
+        raise

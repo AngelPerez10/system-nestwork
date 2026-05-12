@@ -32,6 +32,41 @@ class Domain(DomainMixin):
         verbose_name_plural = "Dominios"
 
 
+class PublicAuthAuditEvent(models.Model):
+    """
+    Auditoría de acciones de seguridad en el schema público (SHARED_APPS).
+
+    workspace.SecurityAuditEvent solo existe en schemas de tenant; cuando el API
+    atiende en ``public`` (p. ej. sin fila Domain aún), los eventos se guardan aquí
+    con los mismos campos semánticos — sin debilitar trazabilidad.
+    """
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="public_auth_audit_events",
+    )
+    action = models.CharField(max_length=120)
+    target_user_id = models.IntegerField(null=True, blank=True)
+    schema_name = models.CharField(max_length=63, blank=True, default="")
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "Auditoría de auth (público)"
+        verbose_name_plural = "Auditorías de auth (público)"
+        indexes = [
+            models.Index(fields=["-created_at"], name="orgs_pubaudit_c_at"),
+            models.Index(fields=["action", "-created_at"], name="orgs_pubaudit_act_ct"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.created_at:%Y-%m-%d %H:%M} {self.action}"
+
+
 class OrganizationUser(models.Model):
     """Membresía de usuarios globales a una organización (tenant)."""
 
