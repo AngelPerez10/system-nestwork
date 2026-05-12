@@ -185,10 +185,11 @@ def custom_plan_lead(request):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def starter_pricing(request):
-    schema_guard = _require_public_schema()
-    if schema_guard:
-        return schema_guard
-    """Precio público del plan starter (base, IVA, total mensual)."""
+    """Precio público del plan starter (base, IVA, total mensual).
+
+    Sin _require_public_schema: solo lee settings; debe servir desde cualquier host (SPA en otro
+    origin o API resuelto a tenant) para que el checkout muestre el precio sin 404.
+    """
     base = getattr(settings, "STARTER_PLAN_BASE_MXN", None)
     rate = getattr(settings, "STARTER_PLAN_IVA_RATE", None)
     total = starter_monthly_total_mxn()
