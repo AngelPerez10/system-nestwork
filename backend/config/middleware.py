@@ -4,15 +4,40 @@ OWASP 2025: A02: Security Misconfiguration
 
 Includes:
 1. HostHeaderValidationMiddleware - Prevents Host header attacks
-2. ContentSecurityPolicyMiddleware - CSP headers for XSS prevention
+2. HealthCheckMiddleware - Liveness before tenant DB lookup (Render / probes)
+3. ContentSecurityPolicyMiddleware - CSP headers for XSS prevention
 """
 import logging
 
 from django.conf import settings
 from django.core.exceptions import DisallowedHost
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, JsonResponse
 
 logger = logging.getLogger(__name__)
+
+# Resolved before TenantMainMiddleware so health checks do not require a
+# organizations.Domain row for the request host (common on first Render deploy).
+_LIVENESS_GET_PATHS = frozenset({"/healthz", "/api/health", "/api/health/"})
+
+
+class HealthCheckMiddleware:
+    """
+    Cheap liveness: no DB, no tenant resolution.
+
+    TenantMainMiddleware queries Domain by Host; until that row exists (or
+    SHOW_PUBLIC_IF_NO_TENANT_FOUND is on), probes would 404/500. Render and
+    load balancers need a stable 200 here.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if request.method == "GET" and request.path in _LIVENESS_GET_PATHS:
+            return JsonResponse({"status": "ok", "scope": "public"})
+        if request.method == "HEAD" and request.path == "/":
+            return HttpResponse(status=200)
+        return self.get_response(request)
 
 
 class HostHeaderValidationMiddleware:

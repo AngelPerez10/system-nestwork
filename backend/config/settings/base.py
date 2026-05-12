@@ -103,6 +103,7 @@ if _db_password in _default_db_passwords and not env.bool("DJANGO_DEBUG", defaul
 
 MIDDLEWARE = [
     "config.middleware.HostHeaderValidationMiddleware",  # Security: Validate Host BEFORE tenant resolution
+    "config.middleware.HealthCheckMiddleware",  # Liveness before tenant (no Domain row required)
     "django_tenants.middleware.main.TenantMainMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "config.middleware.ContentSecurityPolicyMiddleware",  # Security: CSP headers (OWASP 2025: A02)
