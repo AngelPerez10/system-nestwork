@@ -62,6 +62,6 @@ boto3==1.35.93
 pytest==8.4.1
 pytest-django==4.11.1
 black==25.1.0
-ruff==0.11.0
+ruff==0.15.12
 mypy==1.15.0
 bandit==1.8.3
