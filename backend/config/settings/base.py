@@ -73,17 +73,28 @@ TENANT_DOMAIN_MODEL = "organizations.Domain"
 
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django_tenants.postgresql_backend",
-        "NAME": env("POSTGRES_DB", default="erp"),
-        "USER": env("POSTGRES_USER", default="erp"),
-        "PASSWORD": env("POSTGRES_PASSWORD", default="erp"),
-        "HOST": env("POSTGRES_HOST", default="localhost"),
-        "PORT": env("POSTGRES_PORT", default="5432"),
-        "CONN_MAX_AGE": env.int("POSTGRES_CONN_MAX_AGE", default=60),
+# Render / Heroku: linked PostgreSQL often exposes DATABASE_URL only.
+_database_url = env.str("DATABASE_URL", default="").strip()
+if _database_url:
+    DATABASES = {
+        "default": env.db_url(
+            "DATABASE_URL",
+            conn_max_age=env.int("POSTGRES_CONN_MAX_AGE", default=60),
+            engine="django_tenants.postgresql_backend",
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django_tenants.postgresql_backend",
+            "NAME": env("POSTGRES_DB", default="erp"),
+            "USER": env("POSTGRES_USER", default="erp"),
+            "PASSWORD": env("POSTGRES_PASSWORD", default="erp"),
+            "HOST": env("POSTGRES_HOST", default="localhost"),
+            "PORT": env("POSTGRES_PORT", default="5432"),
+            "CONN_MAX_AGE": env.int("POSTGRES_CONN_MAX_AGE", default=60),
+        }
+    }
 
 # Security: Reject default DB credentials in production
 _db_password = DATABASES["default"]["PASSWORD"]

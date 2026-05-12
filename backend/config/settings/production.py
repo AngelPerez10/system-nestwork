@@ -13,7 +13,10 @@ if not ALLOWED_HOSTS or ALLOWED_HOSTS == ["localhost", "127.0.0.1"]:
         "Production requires ALLOWED_HOSTS to be set to your real API hostnames."
     )
 
-SHOW_PUBLIC_IF_NO_TENANT_FOUND = False
+SHOW_PUBLIC_IF_NO_TENANT_FOUND = env.bool(
+    "SHOW_PUBLIC_IF_NO_TENANT_FOUND",
+    default=False,
+)
 
 # Hard-stop stubs in production unless there is an explicit temporary override.
 ENABLE_OPS_STUBS = env.bool("ENABLE_OPS_STUBS", default=False)
