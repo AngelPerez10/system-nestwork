@@ -49,6 +49,9 @@ services:
         sync: false
       - key: CORS_ALLOWED_ORIGINS
         sync: false
+      # Same origin as your Render static site (no trailing slash). Merged into CORS + CSRF in production.py.
+      - key: FRONTEND_BASE_URL
+        sync: false
       # First deploy on Render: set to true until a Domain exists for your API host; then false.
       - key: SHOW_PUBLIC_IF_NO_TENANT_FOUND
         sync: false
