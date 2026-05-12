@@ -29,7 +29,19 @@ def _attach_jwt_cookies(response, refresh: RefreshToken) -> None:
     session_mode = getattr(settings, "AUTH_JWT_SESSION_COOKIES", False)
     access_max = None if session_mode else int(sj["ACCESS_TOKEN_LIFETIME"].total_seconds())
     refresh_max = None if session_mode else int(sj["REFRESH_TOKEN_LIFETIME"].total_seconds())
-    common = {"httponly": True, "secure": not is_debug, "samesite": "Lax"}
+    samesite = str(sj.get("AUTH_COOKIE_SAMESITE", "Lax") or "Lax")
+    secure = sj.get("AUTH_COOKIE_SECURE", not is_debug)
+    if isinstance(secure, str):
+        secure = secure.strip().lower() in ("1", "true", "yes", "on")
+    else:
+        secure = bool(secure)
+    if samesite.lower() == "none":
+        secure = True
+    common = {
+        "httponly": bool(sj.get("AUTH_COOKIE_HTTP_ONLY", True)),
+        "secure": secure,
+        "samesite": samesite,
+    }
     response.set_cookie(
         key="access_token",
         value=str(refresh.access_token),

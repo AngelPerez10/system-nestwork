@@ -159,4 +159,27 @@ if not CSRF_TRUSTED_ORIGINS:
         "This prevents CSRF attacks on cookie-based auth endpoints."
     )
 
+# SPA en otro sitio (origen distinto al del API): sin SameSite=None + Secure el navegador no envía
+# las cookies JWT en fetch(..., { credentials: 'include' }) y /api/me devuelve 401 → vuelta al login.
+_api_origin = (_render_base_origin or "").rstrip("/")
+_jwt_same = (os.environ.get("AUTH_COOKIE_SAMESITE") or "").strip()
+if _jwt_same:
+    SIMPLE_JWT["AUTH_COOKIE_SAMESITE"] = _jwt_same
+else:
+    _cross_frontend = bool(
+        _frontend_origin
+        and (not _api_origin or _frontend_origin.rstrip("/") != _api_origin)
+    )
+    _cross_cors = bool(
+        _api_origin
+        and any(
+            (o or "").rstrip("/") != _api_origin for o in (CORS_ALLOWED_ORIGINS or [])
+        )
+    )
+    if _cross_frontend or _cross_cors:
+        SIMPLE_JWT["AUTH_COOKIE_SAMESITE"] = "None"
+    else:
+        SIMPLE_JWT["AUTH_COOKIE_SAMESITE"] = "Lax"
+SIMPLE_JWT["AUTH_COOKIE_SECURE"] = True
+
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
