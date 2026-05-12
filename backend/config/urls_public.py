@@ -1,5 +1,9 @@
 """
-Rutas resueltas cuando el request cae en el schema público (sin tenant).
+Rutas que antes se usaban solo con PUBLIC_SCHEMA_URLCONF.
+
+Ahora `PUBLIC_SCHEMA_URLCONF` y `ROOT_URLCONF` apuntan a `config.urls` (misma lista de rutas en
+público y en tenant). Este módulo se conserva como referencia o para pruebas locales si se vuelve
+a separar la URLconf pública.
 """
 from django.urls import include, path
 

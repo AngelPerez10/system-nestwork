@@ -119,7 +119,10 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
-PUBLIC_SCHEMA_URLCONF = "config.urls_public"
+# Misma URLconf que el schema público: evita 404 en /api/login/, /api/me/, onboarding, etc. cuando
+# django-tenants usa PUBLIC_SCHEMA_URLCONF (p. ej. SHOW_PUBLIC_IF_NO_TENANT_FOUND). La separación por
+# vistas (p. ej. _reject_public_schema) sigue acotando qué hace cada endpoint en schema public.
+PUBLIC_SCHEMA_URLCONF = "config.urls"
 
 WSGI_APPLICATION = "config.wsgi.application"
 
