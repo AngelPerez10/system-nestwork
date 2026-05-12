@@ -8,7 +8,7 @@
 # Django 5.2 LTS is recommended for production stability
 # Latest patch: 5.2.13 (April 2026)
 # Next LTS: Django 6.2 LTS (April 2027)
-Django==5.2.13
+Django==6.0.5
 gunicorn==23.0.0
 
 # Multi-tenant architecture with PostgreSQL schemas
