@@ -9,7 +9,7 @@
 #    so health checks and first requests hit the schema público; turn off after onboarding a domain.
 #
 # Static site (Render dashboard), choose ONE:
-# A) Root Directory `frontend` → Publish `dist`, Build `corepack enable && pnpm install --frozen-lockfile && pnpm run build`
+# A) Root Directory `frontend` → Publish `dist`, Build `bash build.sh` (frontend/build.sh)
 # B) Root Directory empty (repo root) → Publish `frontend/dist`, Build `npm run build` (uses root package.json → frontend/)
 # Set VITE_API_BASE to your API URL on the static site.
 
@@ -21,9 +21,8 @@ services:
     region: oregon
     plan: free
     rootDir: backend
-    # Explicit gunicorn install: some deploys used a requirements.txt without the last lines;
-    # this guarantees the WSGI server is in the same venv as `python -m gunicorn`.
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt && pip install "gunicorn==23.0.0"
+    # Build script (rootDir = backend: solo existe backend/ en el contexto de build).
+    buildCommand: bash build.sh
     # Use python -m gunicorn so the binary is found (Render PATH often omits the venv scripts dir).
     startCommand: python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120
     preDeployCommand: python manage.py migrate --noinput && python manage.py ensure_superuser
