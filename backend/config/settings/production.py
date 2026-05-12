@@ -90,9 +90,15 @@ if not ALLOWED_HOSTS or ALLOWED_HOSTS == ["localhost", "127.0.0.1"]:
         "Production requires ALLOWED_HOSTS to be set to your real API hostnames."
     )
 
+# Sin Domain para el hostname del API, django-tenants no resuelve tenant y responde 404 a *todas*
+# las rutas salvo que se active el fallback a schema/urlconf público.
+# En Render (RENDER=1) el default es True para que el primer deploy funcione; en otros entornos
+# prod el default sigue siendo False. Anula con SHOW_PUBLIC_IF_NO_TENANT_FOUND=false cuando ya
+# tengas un Domain para tu host API.
+_render_truthy = (os.environ.get("RENDER") or "").strip().lower() in ("1", "true", "yes", "on")
 SHOW_PUBLIC_IF_NO_TENANT_FOUND = env.bool(
     "SHOW_PUBLIC_IF_NO_TENANT_FOUND",
-    default=False,
+    default=_render_truthy,
 )
 
 # Hard-stop stubs in production unless there is an explicit temporary override.
