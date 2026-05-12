@@ -1,3 +1,8 @@
+from __future__ import annotations
+
+import os
+from urllib.parse import urlparse
+
 from .base import *
 
 DEBUG = False
@@ -6,6 +11,27 @@ if not SECRET_KEY:
     raise ValueError(
         "DJANGO_SECRET_KEY must be set in production (long random string, keep secret)."
     )
+
+
+def _render_service_hostname() -> str | None:
+    """Render sets RENDER and RENDER_EXTERNAL_URL (e.g. https://name.onrender.com)."""
+    if (os.environ.get("RENDER") or "").strip().lower() not in ("1", "true", "yes", "on"):
+        return None
+    url = (os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
+    if not url:
+        return None
+    try:
+        return urlparse(url).hostname
+    except Exception:
+        return None
+
+
+_rh = _render_service_hostname()
+if _rh:
+    _hosts = list(ALLOWED_HOSTS)
+    if _rh not in _hosts:
+        _hosts.append(_rh)
+    ALLOWED_HOSTS = _hosts
 
 # Required when DEBUG is False (Django deployment checklist)
 if not ALLOWED_HOSTS or ALLOWED_HOSTS == ["localhost", "127.0.0.1"]:
