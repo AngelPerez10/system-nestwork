@@ -1,0 +1,11 @@
+{
+  "name": "system-nestwork",
+  "private": true,
+  "description": "Monorepo root: Render static sites without Root Directory use `npm run build` + Publish `frontend/dist`.",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "build": "cd frontend && corepack enable && pnpm install --frozen-lockfile && pnpm run build"
+  }
+}

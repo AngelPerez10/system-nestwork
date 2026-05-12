@@ -8,8 +8,10 @@
 # 4. Until a tenant Domain exists for your *.onrender.com host, set SHOW_PUBLIC_IF_NO_TENANT_FOUND=true
 #    so health checks and first requests hit the schema público; turn off after onboarding a domain.
 #
-# Static site (dashboard): Root Directory MUST be `frontend` (repo root has no package.json). Publish: `dist`.
-# Build: `corepack enable && pnpm install --frozen-lockfile && pnpm run build`. Set VITE_API_BASE to your API URL.
+# Static site (Render dashboard), choose ONE:
+# A) Root Directory `frontend` → Publish `dist`, Build `corepack enable && pnpm install --frozen-lockfile && pnpm run build`
+# B) Root Directory empty (repo root) → Publish `frontend/dist`, Build `npm run build` (uses root package.json → frontend/)
+# Set VITE_API_BASE to your API URL on the static site.
 
 version: "1"
 services:
