@@ -76,13 +76,9 @@ DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 # Render / Heroku: linked PostgreSQL often exposes DATABASE_URL only.
 _database_url = env.str("DATABASE_URL", default="").strip()
 if _database_url:
-    DATABASES = {
-        "default": env.db_url(
-            "DATABASE_URL",
-            conn_max_age=env.int("POSTGRES_CONN_MAX_AGE", default=60),
-            engine="django_tenants.postgresql_backend",
-        )
-    }
+    _db = env.db_url("DATABASE_URL", engine="django_tenants.postgresql_backend")
+    _db["CONN_MAX_AGE"] = env.int("POSTGRES_CONN_MAX_AGE", default=60)
+    DATABASES = {"default": _db}
 else:
     DATABASES = {
         "default": {
