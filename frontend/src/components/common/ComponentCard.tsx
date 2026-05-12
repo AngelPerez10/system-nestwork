@@ -28,17 +28,17 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
             : "px-6 py-5"
         }
       >
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <h3
             className={
               compact
-                ? "text-sm font-semibold tracking-tight text-gray-900 sm:text-base sm:font-medium sm:tracking-normal dark:text-[#f0f0f0]"
-                : "text-base font-medium text-gray-900 dark:text-[#f0f0f0]"
+                ? "min-w-0 flex-1 text-sm font-semibold tracking-tight text-gray-900 sm:text-base sm:font-medium sm:tracking-normal dark:text-[#f0f0f0]"
+                : "min-w-0 flex-1 text-base font-medium text-gray-900 dark:text-[#f0f0f0]"
             }
           >
             {title}
           </h3>
-          {actions ? <div className="shrink-0">{actions}</div> : null}
+          {actions ? <div className="w-full shrink-0 sm:w-auto sm:max-w-[min(100%,20rem)]">{actions}</div> : null}
         </div>
         {desc && (
           <p

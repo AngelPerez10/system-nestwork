@@ -82,6 +82,10 @@ def tarea_detail(request, tarea_id: int):
     if request.method == "DELETE":
         if not can_tareas(request.user, "delete"):
             return Response({"detail": "No autorizado"}, status=403)
+        old_refs = normalize_fotos_refs_list(
+            tarea.fotos_urls if isinstance(tarea.fotos_urls, list) else []
+        )
+        r2_storage.delete_tenant_photo_refs(old_refs)
         tarea.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -97,6 +101,9 @@ def tarea_detail(request, tarea_id: int):
     if "usuario_asignado" in data:
         tarea.usuario_asignado_id = get_assigned_user_id(request.user, data.get("usuario_asignado"))
     if "fotos_refs" in data or "fotos_urls" in data:
+        prev_refs = normalize_fotos_refs_list(
+            tarea.fotos_urls if isinstance(tarea.fotos_urls, list) else []
+        )
         refs = normalize_fotos_refs_list(
             data.get("fotos_refs") if "fotos_refs" in data else data.get("fotos_urls")
         )
@@ -104,6 +111,9 @@ def tarea_detail(request, tarea_id: int):
             assert_max_fotos(refs)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=400)
+        new_set = set(refs)
+        removed = [r for r in prev_refs if r not in new_set]
+        r2_storage.delete_tenant_photo_refs(removed)
         tarea.fotos_urls = refs
     if "estado" in data and data.get("estado") in {
         Tarea.Estado.BACKLOG,

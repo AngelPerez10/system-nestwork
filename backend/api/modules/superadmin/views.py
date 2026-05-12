@@ -49,7 +49,13 @@ def superadmin_company_detail(request, company_id: int):
     if request.method == "DELETE":
         error = superadmin_services.delete_company(company_id)
         if error:
-            status_code = 404 if "no encontrada" in error else 400
+            el = error.lower()
+            if "no encontrada" in el:
+                status_code = status.HTTP_404_NOT_FOUND
+            elif "usuarios activos" in el or "desasigna" in el:
+                status_code = status.HTTP_409_CONFLICT
+            else:
+                status_code = status.HTTP_400_BAD_REQUEST
             return Response({"detail": error}, status=status_code)
         return Response(status=status.HTTP_204_NO_CONTENT)
 

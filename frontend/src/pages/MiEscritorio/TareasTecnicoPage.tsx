@@ -6,6 +6,8 @@ import Alert from "@/components/ui/alert/Alert";
 import { Modal } from "@/components/ui/modal";
 import { useDropzone } from "react-dropzone";
 import { apiUrl, getAuthHeaders } from "@/config/api";
+import { MAX_FOTOS_POR_ORDEN } from "@/config/uploads";
+import { compressImageToJpegBlob, isOrdenPhotoStorageRef } from "@/utils/ordenPhotoUpload";
 import { MobileTareaList } from "./MobileTareaCard";
 import { PencilIcon, TrashBinIcon } from "../../icons";
 import { draggable, dropTargetForElements, monitorForElements } from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
@@ -50,6 +52,7 @@ interface Tarea {
   orden?: number;
   descripcion: string;
   fotos_urls: string[];
+  fotos_refs?: string[];
   fecha_creacion: string;
   fecha_actualizacion: string;
   creado_por?: number;
@@ -115,122 +118,58 @@ export default function TareasTecnicoPage() {
   const openDescripcionModal = (t: Tarea) => setDescripcionModal({ open: true, content: t.descripcion || "-" });
   const openFotosModal = (t: Tarea) => setFotosModal({ open: true, urls: Array.isArray(t.fotos_urls) ? t.fotos_urls : [] });
 
-  const compressImage = async (
-    file: File,
-    maxSizeKB: number,
-    maxWidth: number = 1400,
-    maxHeight: number = 1400
-  ): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          let width = img.width;
-          let height = img.height;
-          if (width > maxWidth || height > maxHeight) {
-            if (width > height) {
-              height = (height / width) * maxWidth;
-              width = maxWidth;
-            } else {
-              width = (width / height) * maxHeight;
-              height = maxHeight;
-            }
-          }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          ctx?.drawImage(img, 0, 0, width, height);
-          let quality = 0.9;
-          const compress = () => {
-            canvas.toBlob(
-              (blob) => {
-                if (!blob) {
-                  reject(new Error("Error al comprimir la imagen"));
-                  return;
-                }
-                const sizeKB = blob.size / 1024;
-                if (sizeKB <= maxSizeKB || quality <= 0.1) {
-                  const r = new FileReader();
-                  r.readAsDataURL(blob);
-                  r.onloadend = () => resolve(r.result as string);
-                } else {
-                  quality -= 0.1;
-                  compress();
-                }
-              },
-              "image/jpeg",
-              quality
-            );
-          };
-          compress();
-        };
-        img.onerror = () => reject(new Error("Error al cargar la imagen"));
-      };
-      reader.onerror = () => reject(new Error("Error al leer el archivo"));
-    });
-  };
-
-  const getPublicIdFromUrl = (url: string): string | null => {
-    try {
-      const u = new URL(url);
-      const parts = u.pathname.split("/");
-      const uploadIdx = parts.findIndex((p) => p === "upload");
-      if (uploadIdx === -1) return null;
-      const after = parts.slice(uploadIdx + 1);
-      const startIdx = after.length && /^v\d+$/i.test(after[0]) ? 1 : 0;
-      const pathParts = after.slice(startIdx);
-      if (!pathParts.length) return null;
-      const last = pathParts[pathParts.length - 1];
-      const dot = last.lastIndexOf(".");
-      pathParts[pathParts.length - 1] = dot > 0 ? last.substring(0, dot) : last;
-      return pathParts.join("/");
-    } catch {
-      return null;
-    }
-  };
-
   const [formData, setFormData] = useState({
     usuario_asignado: null as number | null,
     descripcion: "",
     fotos_urls: [] as string[],
+    fotos_refs: [] as string[],
   });
 
   const onDropPhotos = async (acceptedFiles: File[]) => {
-    const current = Array.isArray(formData.fotos_urls) ? formData.fotos_urls : [];
-    const remainingSlots = 2 - current.length;
+    const currentUrls = Array.isArray(formData.fotos_urls) ? formData.fotos_urls : [];
+    const currentRefs = Array.isArray(formData.fotos_refs) ? formData.fotos_refs : [];
+    const n = Math.max(currentUrls.length, currentRefs.length);
+    const remainingSlots = MAX_FOTOS_POR_ORDEN - n;
     if (remainingSlots <= 0) return;
     const files = acceptedFiles.slice(0, remainingSlots).filter((f) => f.type.startsWith("image/"));
     const urls: string[] = [];
+    const refs: string[] = [];
     for (const file of files) {
       try {
-        const compressed = await compressImage(file, 50, 1400, 1400);
+        const blob = await compressImageToJpegBlob(file);
+        const fd = new FormData();
+        fd.append("image", blob, "photo.jpg");
+        fd.append("folder", "tareas/fotos");
         const resp = await fetch(apiUrl("/api/tareas/upload-image/"), {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({ data_url: compressed, folder: "tareas/fotos" }),
+          headers: { ...getAuthHeaders() },
+          body: fd,
+          credentials: "include",
         });
-        if (resp.ok) {
-          const data = await resp.json();
-          if (data && data.url) urls.push(data.url as string);
-        }
+        if (!resp.ok) continue;
+        const data = (await resp.json().catch(() => null)) as { url?: string; key?: string } | null;
+        const url = data?.url ? String(data.url) : "";
+        const keyRaw = data?.key ? String(data.key).trim() : "";
+        if (!url) continue;
+        refs.push(keyRaw || url);
+        urls.push(url);
       } catch {
         // ignore
       }
     }
     if (urls.length) {
-      setFormData({ ...formData, fotos_urls: [...current, ...urls] });
+      setFormData({
+        ...formData,
+        fotos_urls: [...currentUrls, ...urls],
+        fotos_refs: [...currentRefs, ...refs],
+      });
     }
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop: onDropPhotos,
+    maxFiles: MAX_FOTOS_POR_ORDEN,
+    disabled: Math.max(formData.fotos_urls.length, formData.fotos_refs.length) >= MAX_FOTOS_POR_ORDEN,
     accept: {
       "image/png": [],
       "image/jpeg": [],
@@ -239,31 +178,64 @@ export default function TareasTecnicoPage() {
     },
   });
 
-  const handleDeletePhoto = async (index: number, url: string) => {
-    const publicId = getPublicIdFromUrl(url);
-    const updated = (Array.isArray(formData.fotos_urls) ? formData.fotos_urls : []).filter((_, i) => i !== index);
-    try {
-      if (publicId) {
-        await fetch(apiUrl("/api/tareas/delete-image/"), {
+  const handleDeletePhoto = async (index: number) => {
+    const prevRefs = Array.isArray(formData.fotos_refs) ? formData.fotos_refs : [];
+    const prevUrls = Array.isArray(formData.fotos_urls) ? formData.fotos_urls : [];
+    const removedRef = prevRefs[index];
+    const updatedRefs = prevRefs.filter((_, i) => i !== index);
+    const updatedUrls = prevUrls.filter((_, i) => i !== index);
+    const closeConfirm = () => setConfirmDelete({ open: false, index: null, url: null });
+
+    if (removedRef && isOrdenPhotoStorageRef(removedRef)) {
+      try {
+        const res = await fetch(apiUrl("/api/tareas/delete-image/"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
-          body: JSON.stringify({ public_id: publicId }),
+          credentials: "include",
+          body: JSON.stringify({ key: removedRef }),
         });
+        if (!res.ok) {
+          let msg = "No se pudo eliminar la foto del almacenamiento.";
+          try {
+            const err = await res.json();
+            msg = (typeof err?.detail === "string" && err.detail) || msg;
+          } catch {
+            /* ignore */
+          }
+          setAlert({
+            show: true,
+            variant: "error",
+            title: "Error al eliminar foto",
+            message: msg,
+          });
+          setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 5000);
+          closeConfirm();
+          return;
+        }
+      } catch (e) {
+        console.error("Error al eliminar foto:", e);
+        setAlert({
+          show: true,
+          variant: "error",
+          title: "Error al eliminar foto",
+          message: String(e),
+        });
+        setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 5000);
+        closeConfirm();
+        return;
       }
-    } catch {
-      // ignore
-    } finally {
-      setFormData({ ...formData, fotos_urls: updated });
-      setConfirmDelete({ open: false, index: null, url: null });
     }
+
+    setFormData({ ...formData, fotos_urls: updatedUrls, fotos_refs: updatedRefs });
+    closeConfirm();
   };
 
   const validateForm = () => {
     const missing: string[] = [];
-    if (!formData.descripcion?.trim()) missing.push("DescripciÃ³n");
+    if (!formData.descripcion?.trim()) missing.push("Descripción");
     return { ok: missing.length === 0, missing };
   };
 
@@ -275,7 +247,7 @@ export default function TareasTecnicoPage() {
     }
     if (!myId) return;
     setEditingTarea(null);
-    setFormData({ usuario_asignado: myId, descripcion: "", fotos_urls: [] });
+    setFormData({ usuario_asignado: myId, descripcion: "", fotos_urls: [], fotos_refs: [] });
     setShowModal(true);
   };
 
@@ -291,6 +263,7 @@ export default function TareasTecnicoPage() {
       usuario_asignado: t.usuario_asignado || myId,
       descripcion: t.descripcion || "",
       fotos_urls: Array.isArray(t.fotos_urls) ? t.fotos_urls : [],
+      fotos_refs: Array.isArray(t.fotos_refs) ? t.fotos_refs : [],
     });
     setShowModal(true);
   };
@@ -313,30 +286,58 @@ export default function TareasTecnicoPage() {
 
   const handleConfirmDelete = async () => {
     if (!tareaToDelete) return;
-    if (!canTareasDelete) return;
+    if (!canTareasDelete) {
+      setShowDeleteModal(false);
+      setTareaToDelete(null);
+      return;
+    }
     if (!isOwnTask(tareaToDelete)) return;
     const token = getToken();
+    if (!token) return;
     try {
       const response = await fetch(apiUrl(`/api/tareas/${tareaToDelete.id}/`), {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { ...getAuthHeaders() },
+        credentials: "include",
       });
       if (response.ok) {
         await fetchTareas();
         setShowDeleteModal(false);
         setTareaToDelete(null);
-        setAlert({ show: true, variant: "success", title: "Tarea Eliminada", message: "La tarea ha sido eliminada exitosamente." });
-        setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 2500);
+        setAlert({
+          show: true,
+          variant: "success",
+          title: "Tarea Eliminada",
+          message: "La tarea ha sido eliminada exitosamente.",
+        });
+        setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 3000);
+      } else {
+        let errorMsg = "No se pudo eliminar la tarea.";
+        try {
+          const errorData = await response.json();
+          errorMsg = (errorData?.detail || JSON.stringify(errorData)) || errorMsg;
+        } catch {
+          errorMsg = await response.text();
+        }
+        setAlert({ show: true, variant: "error", title: "Error al eliminar", message: errorMsg });
+        setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 5000);
       }
-    } catch {
-      return;
+    } catch (error) {
+      console.error("Error al eliminar tarea:", error);
+      setAlert({
+        show: true,
+        variant: "error",
+        title: "Error al eliminar",
+        message: String(error),
+      });
+      setTimeout(() => setAlert((prev) => ({ ...prev, show: false })), 5000);
     }
   };
 
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingTarea(null);
-    setFormData({ usuario_asignado: myId, descripcion: "", fotos_urls: [] });
+    setFormData({ usuario_asignado: myId, descripcion: "", fotos_urls: [], fotos_refs: [] });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -368,24 +369,26 @@ export default function TareasTecnicoPage() {
     try {
       const url = editingTarea ? apiUrl(`/api/tareas/${editingTarea.id}/`) : apiUrl("/api/tareas/");
       const method = editingTarea ? "PUT" : "POST";
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         usuario_asignado: myId,
         descripcion: formData.descripcion,
-        fotos_urls: Array.isArray(formData.fotos_urls) ? formData.fotos_urls : [],
+        fotos_refs: Array.isArray(formData.fotos_refs) ? formData.fotos_refs : [],
       };
+
       const response = await fetch(url, {
         method,
         headers: {
           ...getAuthHeaders(),
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify(payload),
       });
       if (response.ok) {
         await fetchTareas();
         setShowModal(false);
         setEditingTarea(null);
-        setFormData({ usuario_asignado: myId, descripcion: "", fotos_urls: [] });
+        setFormData({ usuario_asignado: myId, descripcion: "", fotos_urls: [], fotos_refs: [] });
         setAlert({
           show: true,
           variant: "success",
@@ -431,7 +434,8 @@ export default function TareasTecnicoPage() {
       try {
         const res = await fetch(apiUrl("/api/me/"), {
           method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { ...getAuthHeaders() },
+          credentials: "include",
           cache: "no-store" as RequestCache,
         });
         const data = await res.json().catch(() => null);
@@ -487,6 +491,7 @@ export default function TareasTecnicoPage() {
             ...getAuthHeaders(),
             "Content-Type": "application/json",
           },
+          credentials: "include",
         });
 
         if (response.ok) {
@@ -605,6 +610,7 @@ export default function TareasTecnicoPage() {
         ...getAuthHeaders(),
         "Content-Type": "application/json",
       },
+      credentials: "include",
       body: JSON.stringify(patch),
     });
     if (!response.ok) {
@@ -1197,13 +1203,15 @@ export default function TareasTecnicoPage() {
                   <div>
                     <p className={sectionLabelClass}>Evidencia</p>
                     <p className="mt-1 text-sm font-semibold text-gray-900 dark:text-white">Fotos adjuntas</p>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional Â· PNG, JPG o WEBP Â· mÃ¡x. 2</p>
+                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">Opcional · PNG, JPG o WEBP · máx. {MAX_FOTOS_POR_ORDEN}</p>
                   </div>
-                  <span className="tabular-nums text-xs font-medium text-gray-400 dark:text-gray-500">{formData.fotos_urls.length}/2</span>
+                  <span className="tabular-nums text-xs font-medium text-gray-400 dark:text-gray-500">
+                    {Math.max(formData.fotos_urls.length, formData.fotos_refs.length)}/{MAX_FOTOS_POR_ORDEN}
+                  </span>
                 </div>
                 <div
                   {...getRootProps()}
-                  className={`flex cursor-pointer flex-col gap-3 rounded-xl border border-dashed border-gray-300/80 bg-gray-50/60 px-4 py-5 transition-all dark:border-[#2f3849] dark:bg-[#151d28] sm:flex-row sm:items-center sm:gap-4 sm:px-5 ${isDragActive ? "border-[#ff801f]/70 bg-[#ff801f]/10 ring-2 ring-[#ff801f]/20 dark:border-[#ff801f]/60 dark:bg-[#ff801f]/10" : "hover:border-gray-400/60 dark:hover:border-white/[0.18]"} ${formData.fotos_urls.length >= 2 ? "pointer-events-none opacity-45" : ""}`}
+                  className={`flex cursor-pointer flex-col gap-3 rounded-xl border border-dashed border-gray-300/80 bg-gray-50/60 px-4 py-5 transition-all dark:border-[#2f3849] dark:bg-[#151d28] sm:flex-row sm:items-center sm:gap-4 sm:px-5 ${isDragActive ? "border-[#ff801f]/70 bg-[#ff801f]/10 ring-2 ring-[#ff801f]/20 dark:border-[#ff801f]/60 dark:bg-[#ff801f]/10" : "hover:border-gray-400/60 dark:hover:border-white/[0.18]"} ${Math.max(formData.fotos_urls.length, formData.fotos_refs.length) >= MAX_FOTOS_POR_ORDEN ? "pointer-events-none opacity-45" : ""}`}
                 >
                   <input {...getInputProps()} />
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-gray-200/80 bg-white text-gray-500 dark:border-[#2f3849] dark:bg-[#151d28] dark:text-[#a1a4a5]">
@@ -1214,12 +1222,14 @@ export default function TareasTecnicoPage() {
                   </div>
                   <div className="min-w-0 flex-1 text-left">
                     <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {formData.fotos_urls.length >= 2 ? "LÃ­mite de 2 fotos" : "AÃ±adir imÃ¡genes"}
+                      {Math.max(formData.fotos_urls.length, formData.fotos_refs.length) >= MAX_FOTOS_POR_ORDEN
+                        ? `Límite de ${MAX_FOTOS_POR_ORDEN} fotos`
+                        : "Añadir imágenes"}
                     </p>
                     <p className="mt-0.5 text-xs leading-relaxed text-gray-500 dark:text-gray-400">
-                      {formData.fotos_urls.length >= 2
+                      {Math.max(formData.fotos_urls.length, formData.fotos_refs.length) >= MAX_FOTOS_POR_ORDEN
                         ? "Elimine una foto para subir otra."
-                        : "Arrastre archivos aquÃ­ o pulse para elegir desde su equipo."}
+                        : "Arrastre archivos aquí o pulse para elegir desde su equipo."}
                     </p>
                   </div>
                 </div>
@@ -1334,8 +1344,8 @@ export default function TareasTecnicoPage() {
               </button>
               <button
                 onClick={() => {
-                  if (confirmDelete.index !== null && confirmDelete.url) {
-                    handleDeletePhoto(confirmDelete.index, confirmDelete.url);
+                  if (confirmDelete.index !== null) {
+                    void handleDeletePhoto(confirmDelete.index);
                   }
                 }}
                 className="inline-flex h-9 items-center justify-center rounded-lg bg-[#ff801f] px-4 text-sm font-medium text-black transition-colors hover:bg-[#ff6a00]"

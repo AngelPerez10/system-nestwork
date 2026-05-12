@@ -137,6 +137,10 @@ const primaryOrangeBtnClass =
 const secondaryOutlineBtnClass =
   "inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-[#e7ded0] bg-white px-4 py-2.5 text-sm font-medium text-[#57534e] shadow-none transition-colors hover:bg-[#fffdf8] focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#111a2b] dark:text-[#e5e7eb] dark:hover:bg-[#1e293b]/80 sm:w-auto sm:min-h-0";
 
+/** Mismo primario que el pie «Guardar cambios» del modal Editar usuario */
+const superPanelPrimaryActionClass =
+  "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg bg-[#ff801f] px-4 text-sm font-medium text-black transition-colors hover:bg-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 active:brightness-95 disabled:opacity-60 sm:w-auto";
+
 const selectFieldClass =
   "h-11 w-full rounded-xl border border-[#e2d9ca] bg-[#fffdfa] px-3 text-sm text-[#1c1917] shadow-none outline-none transition-colors focus:border-[#ff801f] focus:ring-2 focus:ring-[#ff801f]/20 dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:focus:border-[#fb923c] dark:focus:ring-[#fb923c]/20";
 
@@ -179,6 +183,7 @@ const superadminService = {
   async listCompanies() {
     const res = await fetch(apiUrl('/api/superadmin/companies/'), {
       method: 'GET',
+      credentials: 'include',
       headers: { ...getAuthHeaders() },
       cache: 'no-store' as RequestCache,
     });
@@ -190,6 +195,7 @@ const superadminService = {
   async createCompany(payload: { name: string; schema_name: string }) {
     const res = await fetch(apiUrl('/api/superadmin/companies/'), {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
     });
@@ -200,6 +206,7 @@ const superadminService = {
   async updateCompany(companyId: number, payload: Partial<Pick<CompanyRecord, 'name' | 'schema_name'>>) {
     const res = await fetch(apiUrl(`/api/superadmin/companies/${companyId}/`), {
       method: 'PATCH',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
     });
@@ -210,16 +217,29 @@ const superadminService = {
   async deleteCompany(companyId: number) {
     const res = await fetch(apiUrl(`/api/superadmin/companies/${companyId}/`), {
       method: 'DELETE',
+      credentials: 'include',
       headers: { ...getAuthHeaders() },
     });
     if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      throw new Error(data?.detail || 'No se pudo eliminar empresa');
+      const raw = await res.text().catch(() => '');
+      let detail = 'No se pudo eliminar empresa';
+      try {
+        const data = raw ? JSON.parse(raw) : null;
+        if (data && typeof data === 'object' && typeof (data as { detail?: unknown }).detail === 'string') {
+          detail = (data as { detail: string }).detail;
+        } else if (raw.trim()) {
+          detail = raw.trim();
+        }
+      } catch {
+        if (raw.trim()) detail = raw.trim();
+      }
+      throw new Error(detail);
     }
   },
   async assignUserToCompany(payload: { user_id: number; company_id: number }) {
     const res = await fetch(apiUrl('/api/superadmin/company-memberships/assign/'), {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(payload),
     });
@@ -230,6 +250,7 @@ const superadminService = {
   async listRoleProfiles() {
     const res = await fetch(apiUrl('/api/superadmin/role-profiles/'), {
       method: 'GET',
+      credentials: 'include',
       headers: { ...getAuthHeaders() },
       cache: 'no-store' as RequestCache,
     });
@@ -399,7 +420,12 @@ export default function UserProfiles() {
   const [companyLoading, setCompanyLoading] = useState(false);
   const [roleProfiles, setRoleProfiles] = useState<CompanyRoleProfile[]>([]);
   const [companyForm, setCompanyForm] = useState({ name: '' });
-  const [editingCompanyId, setEditingCompanyId] = useState<number | null>(null);
+  const [superCompanyEdit, setSuperCompanyEdit] = useState<CompanyRecord | null>(null);
+  const [superCompanyEditName, setSuperCompanyEditName] = useState('');
+  const [superCompanyEditSaving, setSuperCompanyEditSaving] = useState(false);
+  const [superCompanyEditError, setSuperCompanyEditError] = useState<string | null>(null);
+  const [superCompanyDelete, setSuperCompanyDelete] = useState<CompanyRecord | null>(null);
+  const [superCompanyDeleting, setSuperCompanyDeleting] = useState(false);
   const [assignUserId, setAssignUserId] = useState<number | null>(null);
   const [assignCompanyId, setAssignCompanyId] = useState<number | null>(null);
   const [selectedCompanyModal, setSelectedCompanyModal] = useState<{
@@ -736,6 +762,16 @@ export default function UserProfiles() {
     setCompanyModalError(null);
   }, [selectedCompanyModal]);
 
+  useEffect(() => {
+    if (!superCompanyEdit) {
+      setSuperCompanyEditName('');
+      setSuperCompanyEditError(null);
+      return;
+    }
+    setSuperCompanyEditName(superCompanyEdit.name);
+    setSuperCompanyEditError(null);
+  }, [superCompanyEdit]);
+
   const currentOrg = useMemo(() => {
     try {
       const raw = localStorage.getItem('user') || sessionStorage.getItem('user');
@@ -960,32 +996,57 @@ export default function UserProfiles() {
     }
   };
 
-  const saveCompanyEdit = async (companyId: number) => {
-    if (!isPlatformSuperuser) return;
-    const name = companyForm.name.trim();
+  const saveSuperCompanyEdit = async () => {
+    if (!isPlatformSuperuser || !superCompanyEdit) return;
+    const name = superCompanyEditName.trim();
     if (!name) {
-      setError('Nombre de empresa requerido para actualizar empresa.');
+      setSuperCompanyEditError('Nombre de empresa requerido.');
       return;
     }
+    setSuperCompanyEditSaving(true);
+    setSuperCompanyEditError(null);
     try {
-      const updated = await superadminService.updateCompany(companyId, { name });
-      setCompanies((prev) => prev.map((c) => (c.id === companyId ? updated : c)));
-      setEditingCompanyId(null);
-      setCompanyForm({ name: '' });
+      const updated = await superadminService.updateCompany(superCompanyEdit.id, { name });
+      setCompanies((prev) => prev.map((c) => (c.id === superCompanyEdit.id ? updated : c)));
+      setSuperCompanyEdit(null);
+      setSuperCompanyEditName('');
       setSuccess('Empresa actualizada');
-    } catch (e: any) {
-      setError(e?.message || 'No se pudo actualizar empresa');
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'No se pudo actualizar empresa';
+      setSuperCompanyEditError(msg);
+    } finally {
+      setSuperCompanyEditSaving(false);
     }
   };
 
-  const deleteCompany = async (companyId: number) => {
-    if (!isPlatformSuperuser) return;
+  const deleteCompany = async (companyId: number): Promise<boolean> => {
+    if (!isPlatformSuperuser) return false;
     try {
       await superadminService.deleteCompany(companyId);
       setCompanies((prev) => prev.filter((c) => c.id !== companyId));
       setSuccess('Empresa eliminada');
+      return true;
     } catch (e: any) {
       setError(e?.message || 'No se pudo eliminar empresa');
+      return false;
+    }
+  };
+
+  const confirmSuperCompanyDelete = async () => {
+    if (!superCompanyDelete || !isPlatformSuperuser) return;
+    if ((superCompanyDelete.users_count ?? 0) > 0) {
+      setError(
+        'No se puede eliminar una empresa con usuarios asignados. Quita primero a todos los usuarios de esa empresa (desasignación / otra empresa).'
+      );
+      return;
+    }
+    if (superCompanyDeleting) return;
+    setSuperCompanyDeleting(true);
+    try {
+      const ok = await deleteCompany(superCompanyDelete.id);
+      if (ok) setSuperCompanyDelete(null);
+    } finally {
+      setSuperCompanyDeleting(false);
     }
   };
 
@@ -1296,9 +1357,9 @@ export default function UserProfiles() {
   return (
     <>
       <PageMeta title="Gestión de usuarios | Sistema Grupo Intrax GPS" description="Administración de cuentas, roles, permisos y firma digital" />
-      <div className="min-h-[calc(100dvh-5rem)] overflow-x-hidden">
+      <div className="min-h-[calc(100dvh-5rem)] overflow-x-hidden pb-[max(0px,env(safe-area-inset-bottom))]">
         <div
-          className="mx-auto w-full max-w-[min(100%,1920px)] space-y-6 px-3 pb-10 pt-6 text-sm sm:space-y-7 sm:px-5 sm:pb-12 sm:pt-7 sm:text-base md:px-6 lg:px-8 xl:px-10 2xl:max-w-[min(100%,2200px)]"
+          className="mx-auto box-border w-full max-w-[min(100%,1920px)] space-y-5 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-8 pt-5 text-sm sm:space-y-7 sm:pl-5 sm:pr-5 sm:pb-12 sm:pt-7 sm:text-base md:pl-6 md:pr-6 lg:pl-8 lg:pr-8 lg:pb-12 xl:pl-10 xl:pr-10 2xl:max-w-[min(100%,2200px)]"
           style={claudeSansStyle}
         >
           <nav
@@ -1319,7 +1380,7 @@ export default function UserProfiles() {
 
           <header className={`relative flex w-full ${cardShellClass} p-4 sm:p-5 lg:p-6`}>
             <div className="pointer-events-none absolute right-4 top-4 h-20 w-20 rounded-full bg-[#ff801f]/10 blur-2xl sm:right-6 sm:top-6" />
-            <div className="relative z-[1] flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="relative z-[1] flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff801f] text-black sm:h-11 sm:w-11">
                 <svg className="h-5 w-5 sm:h-6 sm:w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -1352,7 +1413,7 @@ export default function UserProfiles() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
             <div className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#273244] dark:bg-[#111a2b]/90 sm:p-4">
               <div className="flex items-center gap-3">
                 <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#e7ded0] bg-white/90 text-[#ea580c] dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#fb923c] sm:h-10 sm:w-10">
@@ -1384,7 +1445,7 @@ export default function UserProfiles() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#273244] dark:bg-[#111a2b]/90 sm:p-4">
+            <div className="col-span-2 rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#273244] dark:bg-[#111a2b]/90 sm:col-span-1 sm:p-4">
               <div className="flex items-center gap-3">
                 <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#fed7aa] bg-[#fff7ed] text-[#9a3412] dark:border-[#9a3412]/40 dark:bg-[#7c2d12]/20 dark:text-[#fdba74] sm:h-10 sm:w-10">
                   <svg viewBox="0 0 24 24" className="h-4 w-4 sm:h-5 sm:w-5" fill="currentColor">
@@ -1400,8 +1461,8 @@ export default function UserProfiles() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3 lg:justify-between">
-            <div className="relative min-w-0 w-full shrink-0 sm:min-w-[min(100%,18rem)] sm:flex-1 md:min-w-[min(100%,22rem)] lg:max-w-none">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-stretch sm:gap-3 lg:items-center lg:justify-between">
+            <div className="relative min-w-0 w-full shrink-0 sm:min-w-0 sm:flex-1 sm:max-w-none md:min-w-[min(100%,20rem)] lg:max-w-none">
               <svg
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#78716c] dark:text-[#64748b] sm:left-3.5"
                 viewBox="0 0 20 20"
@@ -1442,7 +1503,7 @@ export default function UserProfiles() {
                 onClick={openCreate}
                 disabled={!!createLimitReason}
                 title={createLimitReason || undefined}
-                className={`${primaryOrangeBtnClass} ${createLimitReason ? 'cursor-not-allowed opacity-60' : ''}`}
+                className={`${primaryOrangeBtnClass} w-full shrink-0 sm:w-auto ${createLimitReason ? 'cursor-not-allowed opacity-60' : ''}`}
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
                   <path d="M12 5v14M5 12h14" />
@@ -1454,7 +1515,7 @@ export default function UserProfiles() {
               <button
                 type="button"
                 onClick={() => setIsSuperPanelOpen(true)}
-                className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-[#f5b98d] bg-[#fff3e8] px-4 py-2 text-sm font-semibold text-[#9a3412] shadow-sm transition-colors hover:bg-[#ffe9d4] focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 dark:border-[#7c2d12]/40 dark:bg-[#7c2d12]/15 dark:text-[#fdba74] dark:hover:bg-[#7c2d12]/25"
+                className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-[#f5b98d] bg-[#fff3e8] px-4 py-2 text-sm font-semibold text-[#9a3412] shadow-sm transition-colors hover:bg-[#ffe9d4] focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 dark:border-[#7c2d12]/40 dark:bg-[#7c2d12]/15 dark:text-[#fdba74] dark:hover:bg-[#7c2d12]/25 sm:w-auto"
                 aria-label="Abrir panel super usuario"
               >
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" aria-hidden>
@@ -1464,25 +1525,6 @@ export default function UserProfiles() {
               </button>
             )}
           </div>
-
-          {isPlatformSuperuser && (
-            <section className="rounded-2xl border border-[#f3dfcd] bg-gradient-to-r from-[#fff7ef] via-[#fffdfa] to-[#fff7ef] p-4 shadow-[0_22px_38px_-34px_rgba(28,25,23,0.34)] dark:border-[#273244] dark:bg-[#0f172a]/70 sm:p-5">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-[#eadfce] bg-white/80 p-3 dark:border-[#334155] dark:bg-[#0f172a]/80">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#78716c] dark:text-[#94a3b8]">Empresas</p>
-                  <p className="mt-1 text-xl font-semibold text-[#1f2937] dark:text-[#f8fafc]">{companies.length}</p>
-                </div>
-                <div className="rounded-xl border border-[#eadfce] bg-white/80 p-3 dark:border-[#334155] dark:bg-[#0f172a]/80">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#78716c] dark:text-[#94a3b8]">Usuarios sin empresa</p>
-                  <p className="mt-1 text-xl font-semibold text-[#1f2937] dark:text-[#f8fafc]">{unassignedUsers.length}</p>
-                </div>
-                <div className="rounded-xl border border-[#eadfce] bg-white/80 p-3 dark:border-[#334155] dark:bg-[#0f172a]/80">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#78716c] dark:text-[#94a3b8]">Perfiles</p>
-                  <p className="mt-1 text-xl font-semibold text-[#1f2937] dark:text-[#f8fafc]">{roleProfiles.length}</p>
-                </div>
-              </div>
-            </section>
-          )}
 
           <ComponentCard
             compact
@@ -1567,13 +1609,13 @@ export default function UserProfiles() {
                           className="group relative overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa]/95 p-4 text-left shadow-[0_12px_32px_-28px_rgba(28,25,23,0.2)] transition-all hover:border-[#ff801f]/35 dark:border-[#273244] dark:bg-[#111827]/75 dark:hover:border-[#fb923c]/30"
                           aria-label={`Ver usuarios de ${company.name}`}
                         >
-                          <div className="flex items-start justify-between gap-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
                             <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-gray-800 dark:text-white/90">{company.name}</p>
-                              <p className="truncate text-xs text-gray-500 dark:text-gray-400">Empresa: {company.schema_name}</p>
+                              <p className="break-words text-sm font-semibold text-gray-800 dark:text-white/90">{company.name}</p>
+                              <p className="mt-0.5 break-all text-xs text-gray-500 dark:text-gray-400">Empresa: {company.schema_name}</p>
                             </div>
                             <span
-                              className={`inline-flex shrink-0 items-center rounded-md px-2 py-1 text-[11px] font-semibold ${
+                              className={`inline-flex w-fit shrink-0 items-center rounded-md px-2 py-1 text-[11px] font-semibold ${
                                 company.members.length >= MAX_USERS_PER_EMPRESA
                                   ? 'bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200'
                                   : 'bg-[#ff801f]/12 text-[#9a3412] dark:bg-[#ff801f]/20 dark:text-[#ffa057]'
@@ -1617,14 +1659,14 @@ export default function UserProfiles() {
                         className="rounded-2xl border border-[#e7ded0] bg-[#fffdfa]/95 p-4 shadow-[0_12px_32px_-28px_rgba(28,25,23,0.2)] dark:border-[#273244] dark:bg-[#111827]/75"
                         aria-label={`Empresa ${company.name}`}
                       >
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#e7ded0] pb-3 dark:border-[#334155]">
-                          <div>
-                            <h4 className="text-sm font-semibold text-gray-800 dark:text-white/90">{company.name}</h4>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                        <div className="mb-3 flex flex-col gap-2 border-b border-[#e7ded0] pb-3 dark:border-[#334155] sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-2">
+                          <div className="min-w-0">
+                            <h4 className="break-words text-sm font-semibold text-gray-800 dark:text-white/90">{company.name}</h4>
+                            <p className="mt-0.5 break-all text-xs text-gray-500 dark:text-gray-400">
                               {company.schema ? `Empresa: ${company.schema}` : 'Sin empresa'}
                             </p>
                           </div>
-                          <span className={`inline-flex items-center rounded-lg px-2 py-1 text-[11px] font-semibold ${limitReached
+                          <span className={`inline-flex w-fit items-center rounded-lg px-2 py-1 text-[11px] font-semibold ${limitReached
                             ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
                             : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
                             }`}>
@@ -1647,7 +1689,7 @@ export default function UserProfiles() {
                                   </span>
                                 </div>
                                 <p className="mt-1 truncate text-[11px] text-gray-500 dark:text-gray-400">{fullName || '—'}</p>
-                                <p className="mt-0.5 truncate text-[11px] text-gray-500 dark:text-gray-400">{u.email || '—'}</p>
+                                <p className="mt-0.5 break-words text-[11px] text-gray-500 dark:text-gray-400">{u.email || '—'}</p>
                               </article>
                             );
                           })}
@@ -1685,8 +1727,8 @@ export default function UserProfiles() {
                       key={u.id}
                       className="group relative overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa]/95 p-4 shadow-[0_12px_32px_-28px_rgba(28,25,23,0.2)] transition-all hover:border-[#ff801f]/35 dark:border-[#273244] dark:bg-[#111827]/75 dark:hover:border-[#fb923c]/30"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#e7ded0] bg-gradient-to-br from-[#fcfaf6] to-white text-sm font-semibold text-[#1c1917] transition group-hover:border-[#ff801f]/40 dark:from-[#1e293b] dark:to-[#0f172a] dark:border-[#334155] dark:text-[#f8fafc]">
                             {initials || 'U'}
                           </div>
@@ -1764,12 +1806,12 @@ export default function UserProfiles() {
                         </div>
                       </div>
 
-                      <div className="mt-3 space-y-2">
-                        <div className="truncate text-xs text-gray-500 dark:text-gray-400">
+                      <div className="mt-3 min-w-0 space-y-2">
+                        <div className="break-words text-xs text-gray-500 dark:text-gray-400">
                           <span className="text-gray-400 dark:text-gray-500">Correo:</span>{' '}
                           {u.email || '—'}
                         </div>
-                        <div className="truncate text-xs text-gray-500 dark:text-gray-400">
+                        <div className="break-words text-xs text-gray-500 dark:text-gray-400">
                           <span className="text-gray-400 dark:text-gray-500">Empresa:</span>{' '}
                           {currentOrgLabel}
                         </div>
@@ -1855,7 +1897,7 @@ export default function UserProfiles() {
             isOpen={!!selectedCompanyModal}
             onClose={() => setSelectedCompanyModal(null)}
             closeOnEscape={!isEditOpen && !isPermsOpen}
-            className="flex max-h-[min(94vh,820px)] w-[min(96vw,60rem)] flex-col overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa] p-0 shadow-[0_26px_70px_-40px_rgba(28,25,23,0.45)] dark:border-[#273244] dark:bg-[#111a2b] sm:w-[min(95vw,60rem)]"
+            className="flex max-h-[min(94dvh,820px)] w-[min(100vw-1rem,60rem)] max-w-[100vw] flex-col overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa] p-0 shadow-[0_26px_70px_-40px_rgba(28,25,23,0.45)] dark:border-[#273244] dark:bg-[#111a2b] sm:w-[min(95vw,60rem)]"
           >
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
               <header className="relative shrink-0 border-b border-[#e7ded0] bg-[#fcfaf6] px-4 py-4 pr-14 dark:border-[#334155] dark:bg-[#111827] sm:px-6 sm:py-5 sm:pr-16">
@@ -1994,30 +2036,39 @@ export default function UserProfiles() {
           <Modal
             mobileBottomSheet
             isOpen={isSuperPanelOpen}
-            onClose={() => setIsSuperPanelOpen(false)}
-            className="flex max-h-[min(96vh,860px)] w-[min(98vw,72rem)] flex-col overflow-hidden rounded-xl border border-[#e7ded0] bg-[#fffdfa] p-0 shadow-xl dark:border-[#273244] dark:bg-[#111a2b] sm:w-[min(95vw,72rem)] sm:rounded-2xl"
+            onClose={() => {
+              setIsSuperPanelOpen(false);
+              setSuperCompanyEdit(null);
+              setSuperCompanyDelete(null);
+            }}
+            closeOnEscape={!superCompanyEdit && !superCompanyDelete}
+            className="flex max-h-[min(92vh,860px)] w-[min(94vw,42rem)] flex-col overflow-hidden rounded-xl border border-[#e7ded0] bg-[#fffdfa] p-0 shadow-xl dark:border-[#273244] dark:bg-[#111a2b] sm:max-w-2xl"
           >
             <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-              <header className="relative shrink-0 border-b border-[#e7ded0] bg-[#fcfaf6] px-4 py-3.5 pr-12 dark:border-[#334155] dark:bg-[#111827] sm:px-6 sm:py-5 sm:pr-16">
+              <header className="relative shrink-0 border-b border-[#e7ded0] bg-[#fcfaf6] px-5 py-4 pr-14 dark:border-[#273244] dark:bg-[#0f172a]/70 sm:pr-16">
                 <div className="pointer-events-none absolute left-0 top-0 h-0.5 w-full bg-[#ff801f]" aria-hidden />
-                <div className="flex items-start gap-2.5 sm:gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#ff801f] text-black sm:h-10 sm:w-10">
-                    <svg className="h-4.5 w-4.5 sm:h-5 sm:w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ff801f] text-black">
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden>
                       <path d="M12 3l2.5 6L21 10l-5 4 1.5 7L12 18l-5.5 3 1.5-7-5-4 6.5-1L12 3z" />
                     </svg>
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1 pt-0.5">
                     <p className={sectionLabelClass}>Contactos · Usuarios</p>
-                    <h2 className={`mt-0.5 ${claudeSectionHeadingClass}`}>Panel Super Usuario</h2>
-                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400 sm:mt-1">
-                      Gestiona empresas, asignaciones y perfiles globales.
+                    <h2 className={`mt-1 ${claudeSectionHeadingClass}`}>Panel Super Usuario</h2>
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Alta de empresas, asignación de cuentas sin organización y vista de perfiles.
                     </p>
                   </div>
                 </div>
               </header>
 
-              <div className="custom-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#fffdfa] px-3.5 py-3.5 dark:bg-[#111a2b] sm:px-5 sm:py-4">
-                <div className="inline-flex w-full rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-1 dark:border-[#334155] dark:bg-[#111a2b]" role="tablist" aria-label="Secciones del panel super usuario">
+              <div className="custom-scrollbar min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain bg-[#fffdfa] px-4 py-4 pb-5 dark:bg-[#111a2b] sm:px-5">
+                <div
+                  className="flex w-full gap-1 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-1 dark:border-[#334155] dark:bg-[#0f172a]/80"
+                  role="tablist"
+                  aria-label="Secciones del panel super usuario"
+                >
                   {superTabs.map((t) => (
                     <button
                       key={t.key}
@@ -2026,9 +2077,9 @@ export default function UserProfiles() {
                       role="tab"
                       aria-selected={superTab === t.key}
                       aria-controls={`super-tab-panel-${t.key}`}
-                      className={`h-9 min-h-[36px] flex-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors sm:h-10 sm:min-h-[40px] sm:px-3 ${superTab === t.key
-                        ? 'bg-[#ff801f]/15 text-[#9a3412] dark:bg-[#ff801f]/20 dark:text-[#ffa057]'
-                        : 'text-gray-600 hover:bg-white dark:text-gray-300 dark:hover:bg-white/10'
+                      className={`min-h-[40px] flex-1 cursor-pointer rounded-lg px-3 py-2 text-xs font-semibold transition-colors sm:min-h-[44px] sm:text-[13px] ${superTab === t.key
+                        ? 'bg-[#fffdfa] text-[#9a3412] shadow-sm ring-1 ring-[#ff801f]/25 dark:bg-[#1e293b] dark:text-[#fdba74] dark:ring-[#fb923c]/30'
+                        : 'text-[#57534e] hover:bg-white/80 hover:text-[#1c1917] dark:text-[#94a3b8] dark:hover:bg-white/[0.06] dark:hover:text-[#e2e8f0]'
                         }`}
                     >
                       {t.label}
@@ -2037,104 +2088,381 @@ export default function UserProfiles() {
                 </div>
 
                 {superTab === 'empresas' && (
-                  <div className="space-y-4" role="tabpanel" id="super-tab-panel-empresas">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      <div>
-                        <Label>Nombre empresa</Label>
-                        <Input value={companyForm.name} onChange={(e) => setCompanyForm((p) => ({ ...p, name: e.target.value }))} />
+                  <div className="space-y-5" role="tabpanel" id="super-tab-panel-empresas">
+                    <section className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-4 dark:border-[#273244] dark:bg-[#111a2b] sm:p-5">
+                      <div className="mb-4 border-b border-[#e7ded0]/90 pb-3 dark:border-[#334155]/80">
+                        <p className={sectionLabelClass}>Alta</p>
+                        <p className={`mt-0.5 ${claudeSubheadingClass} text-base`}>Nueva empresa</p>
+                        <p className="mt-1 text-xs text-[#57534e] dark:text-[#94a3b8]">
+                          El schema se genera automáticamente a partir del nombre.
+                        </p>
                       </div>
-                      <div>
-                        <Label>Schema (automático)</Label>
-                        <Input value={companySchemaPreview} disabled />
-                      </div>
-                      <div className="flex items-end sm:col-span-2 lg:col-span-1">
-                        <button type="button" onClick={() => void createCompany()} className={primaryOrangeBtnClass}>
-                          Crear empresa
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {companies.map((c) => (
-                        <article key={c.id} className="rounded-xl border border-[#e7ded0] bg-white p-3 dark:border-[#334155] dark:bg-[#111a2b]">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-semibold text-gray-800 dark:text-gray-100">{c.name}</p>
-                              <p className="truncate text-xs text-gray-500 dark:text-gray-400">Empresa: {c.schema_name}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingCompanyId(c.id);
-                                  setCompanyForm({ name: c.name });
-                                }}
-                                className={secondaryOutlineBtnClass}
-                              >
-                                Editar
-                              </button>
-                              <button type="button" onClick={() => void deleteCompany(c.id)} className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-error-200 bg-error-50 px-3 py-2 text-xs font-semibold text-error-700 dark:border-error-500/30 dark:bg-error-500/10 dark:text-error-300">
-                                Eliminar
-                              </button>
-                            </div>
-                          </div>
-                          {editingCompanyId === c.id && (
-                            <div className="mt-3">
-                              <button type="button" onClick={() => void saveCompanyEdit(c.id)} className={primaryOrangeBtnClass}>
-                                Guardar cambios
-                              </button>
-                            </div>
-                          )}
-                        </article>
-                      ))}
-                      {!companies.length && (
-                        <div className="col-span-full rounded-xl border border-dashed border-[#e7ded0] px-4 py-6 text-center text-sm text-gray-500 dark:border-[#334155] dark:text-gray-400">
-                          {companyLoading ? 'Cargando empresas...' : 'No hay empresas cargadas.'}
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                          <Label>Nombre empresa</Label>
+                          <Input value={companyForm.name} onChange={(e) => setCompanyForm((p) => ({ ...p, name: e.target.value }))} />
                         </div>
-                      )}
-                    </div>
+                        <div>
+                          <Label>Schema (automático)</Label>
+                          <Input value={companySchemaPreview} disabled className="font-mono text-sm" />
+                        </div>
+                        <div className="flex items-end sm:col-span-2 lg:col-span-1">
+                          <button type="button" onClick={() => void createCompany()} className={superPanelPrimaryActionClass}>
+                            Crear empresa
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section>
+                      <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                          <p className={sectionLabelClass}>Directorio</p>
+                          <p className={`mt-0.5 ${claudeSubheadingClass} text-base`}>Empresas registradas</p>
+                        </div>
+                        <span className="rounded-full border border-[#e7ded0] bg-[#fcfaf6] px-3 py-1 text-[11px] font-semibold tabular-nums text-[#57534e] dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#cbd5e1]">
+                          {companies.length} en total
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        {companies.map((c) => (
+                          <article
+                            key={c.id}
+                            className="group rounded-2xl border border-[#e7ded0] bg-white p-4 transition-colors hover:border-[#ff801f]/35 dark:border-[#334155] dark:bg-[#0f172a] dark:hover:border-[#fb923c]/25"
+                          >
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-[#1c1917] dark:text-[#f8fafc]">{c.name}</p>
+                                <p className="mt-1 inline-flex max-w-full items-center gap-1.5 truncate rounded-lg border border-[#e7ded0] bg-[#fcfaf6] px-2 py-0.5 font-mono text-[11px] text-[#57534e] dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#94a3b8]">
+                                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#78716c] dark:text-[#64748b]">Schema</span>
+                                  {c.schema_name}
+                                </p>
+                                <p className="mt-1 text-[11px] text-[#78716c] dark:text-[#94a3b8]">
+                                  Usuarios asignados:{' '}
+                                  <span className="font-semibold tabular-nums text-[#1c1917] dark:text-[#e5e7eb]">{c.users_count ?? 0}</span>
+                                </p>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setSuperCompanyEdit(c)}
+                                  className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-[#e7ded0] bg-[#fffdf8] text-[#57534e] transition-colors hover:border-[#ff801f]/40 hover:bg-[#ff801f]/10 hover:text-[#9a3412] focus:outline-none focus:ring-2 focus:ring-[#ff801f]/25 dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#e5e7eb] dark:hover:text-[#fdba74]"
+                                  aria-label={`Editar empresa ${c.name}`}
+                                  title="Editar empresa"
+                                >
+                                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                                    <path d="M12 20h9" />
+                                    <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSuperCompanyDelete(c)}
+                                  disabled={(c.users_count ?? 0) > 0}
+                                  className="inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-error-200 bg-error-50 text-error-700 transition-colors hover:bg-error-100 focus:outline-none focus:ring-2 focus:ring-error-300/40 disabled:cursor-not-allowed disabled:opacity-40 dark:border-error-500/35 dark:bg-error-500/10 dark:text-error-300 dark:hover:bg-error-500/20"
+                                  aria-label={
+                                    (c.users_count ?? 0) > 0
+                                      ? `No se puede eliminar ${c.name}: tiene usuarios asignados`
+                                      : `Eliminar empresa ${c.name}`
+                                  }
+                                  title={
+                                    (c.users_count ?? 0) > 0
+                                      ? 'Quita primero todos los usuarios de esta empresa'
+                                      : 'Eliminar empresa'
+                                  }
+                                >
+                                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+                                    <path d="M3 6h18" strokeLinecap="round" />
+                                    <path d="M8 6V4h8v2" strokeLinecap="round" />
+                                    <path d="M6 6l1 16h10l1-16" strokeLinejoin="round" />
+                                    <path d="M10 11v6M14 11v6" strokeLinecap="round" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                        {!companies.length && (
+                          <div className="col-span-full rounded-2xl border border-dashed border-[#e7ded0] bg-[#fffdfa]/80 px-5 py-10 text-center dark:border-[#334155] dark:bg-[#111a2b]/50">
+                            <p className="text-sm font-medium text-[#57534e] dark:text-[#cbd5e1]">
+                              {companyLoading ? 'Cargando empresas…' : 'No hay empresas cargadas.'}
+                            </p>
+                            {!companyLoading && (
+                              <p className="mx-auto mt-2 max-w-sm text-xs text-[#78716c] dark:text-[#94a3b8]">
+                                Crea la primera empresa con el formulario de arriba.
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </section>
                   </div>
                 )}
 
                 {superTab === 'usuarios' && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" role="tabpanel" id="super-tab-panel-usuarios">
-                    <div>
-                      <Label>Usuario sin empresa</Label>
-                      <select value={assignUserId ?? ''} onChange={(e) => setAssignUserId(e.target.value ? Number(e.target.value) : null)} className={selectFieldClass}>
-                        <option value="">Selecciona usuario</option>
-                        {unassignedUsers.map((u) => (
-                          <option key={u.id} value={u.id}>{u.username}</option>
-                        ))}
-                      </select>
+                  <section
+                    className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-4 dark:border-[#273244] dark:bg-[#111a2b] sm:p-5"
+                    role="tabpanel"
+                    id="super-tab-panel-usuarios"
+                  >
+                    <div className="mb-4 border-b border-[#e7ded0]/90 pb-3 dark:border-[#334155]/80">
+                      <p className={sectionLabelClass}>Asignación</p>
+                      <p className={`mt-0.5 ${claudeSubheadingClass} text-base`}>Usuario sin empresa</p>
+                      <p className="mt-1 text-xs text-[#57534e] dark:text-[#94a3b8]">
+                        Vincula una cuenta huérfana a una organización existente.
+                      </p>
                     </div>
-                    <div>
-                      <Label>Empresa destino</Label>
-                      <select value={assignCompanyId ?? ''} onChange={(e) => setAssignCompanyId(e.target.value ? Number(e.target.value) : null)} className={selectFieldClass}>
-                        <option value="">Selecciona empresa</option>
-                        {companies.map((c) => (
-                          <option key={c.id} value={c.id}>{c.name}</option>
-                        ))}
-                      </select>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      <div>
+                        <Label>Usuario sin empresa</Label>
+                        <select value={assignUserId ?? ''} onChange={(e) => setAssignUserId(e.target.value ? Number(e.target.value) : null)} className={selectFieldClass}>
+                          <option value="">Selecciona usuario</option>
+                          {unassignedUsers.map((u) => (
+                            <option key={u.id} value={u.id}>{u.username}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label>Empresa destino</Label>
+                        <select value={assignCompanyId ?? ''} onChange={(e) => setAssignCompanyId(e.target.value ? Number(e.target.value) : null)} className={selectFieldClass}>
+                          <option value="">Selecciona empresa</option>
+                          {companies.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-end sm:col-span-2 lg:col-span-1">
+                        <button type="button" onClick={() => void assignUserToCompany()} className={superPanelPrimaryActionClass}>
+                          Asignar usuario
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-end sm:col-span-2 lg:col-span-1">
-                      <button type="button" onClick={() => void assignUserToCompany()} className={primaryOrangeBtnClass}>
-                        Asignar usuario
-                      </button>
-                    </div>
-                  </div>
+                  </section>
                 )}
 
                 {superTab === 'roles' && (
-                  <div className="space-y-2 rounded-xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#334155] dark:bg-[#0f172a]/70" role="tabpanel" id="super-tab-panel-roles">
-                    <p className="text-xs text-gray-600 dark:text-gray-300">
-                      Perfiles empresariales cargados: <span className="font-semibold">{roleProfiles.length}</span>.
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Próximo paso recomendado: conectar endpoint de crear/editar perfiles por empresa y aplicar rol al usuario.
-                    </p>
-                  </div>
+                  <section
+                    className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-4 dark:border-[#273244] dark:bg-[#111a2b] sm:p-5"
+                    role="tabpanel"
+                    id="super-tab-panel-roles"
+                  >
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className={sectionLabelClass}>Perfiles</p>
+                        <p className={`mt-0.5 ${claudeSubheadingClass} text-base`}>Roles por empresa</p>
+                        <p className="mt-2 max-w-xl text-xs leading-relaxed text-[#57534e] dark:text-[#94a3b8]">
+                          Los perfiles empresariales definen permisos por módulo. Próximo paso: conectar creación y edición desde API y aplicar rol al usuario.
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                        <span className="inline-flex items-center justify-center rounded-full bg-[#ff801f]/15 px-4 py-2 text-sm font-semibold tabular-nums text-[#9a3412] dark:bg-[#ff801f]/20 dark:text-[#fdba74]">
+                          {roleProfiles.length} cargados
+                        </span>
+                      </div>
+                    </div>
+                  </section>
                 )}
               </div>
+
+              <div className="shrink-0 border-t border-[#e7ded0] bg-[#fcfaf6] px-4 py-3 dark:border-[#273244] dark:bg-[#0f172a]/70 sm:px-5">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsSuperPanelOpen(false);
+                      setSuperCompanyEdit(null);
+                      setSuperCompanyDelete(null);
+                    }}
+                    className={secondaryOutlineBtnClass}
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
             </div>
+          </Modal>
+
+          <Modal
+            mobileBottomSheet
+            isOpen={!!superCompanyEdit}
+            onClose={() => {
+              if (superCompanyEditSaving) return;
+              setSuperCompanyEdit(null);
+            }}
+            closeOnBackdropClick={false}
+            closeOnEscape={!superCompanyEditSaving}
+            ariaLabelledBy="super-company-edit-title"
+            closeButtonClassName="!h-8 !w-8 !rounded-xl border-[#e7ded0]/90 bg-[#fcfaf6]/95 text-[#78716c] shadow-none hover:bg-[#efe9de] hover:text-[#44403c] dark:border-[#334155] dark:bg-[#1e293b]/90 dark:text-[#94a3b8] dark:hover:bg-[#334155]/80 dark:hover:text-[#e2e8f0] sm:!right-4 sm:!top-4 sm:!h-9 sm:!w-9"
+            className="self-center !w-[min(100vw-1.25rem,22rem)] max-w-[min(100vw-1.25rem,22rem)] shrink-0 overflow-hidden rounded-xl border border-[#e7ded0] bg-[#fffdfa] p-0 shadow-xl dark:border-[#273244] dark:bg-[#111a2b]"
+          >
+            <div className="flex min-h-0 w-full flex-col overflow-hidden">
+              <header className="relative shrink-0 border-b border-[#e7ded0] bg-[#fcfaf6] px-5 py-4 pr-14 dark:border-[#273244] dark:bg-[#0f172a]/70 sm:pr-16">
+                <div className="pointer-events-none absolute left-0 top-0 h-0.5 w-full bg-[#ff801f]" aria-hidden />
+                <div className="flex items-start gap-3.5">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ff801f] text-black">
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1 pt-0.5">
+                    <p className={sectionLabelClass}>Empresa</p>
+                    <h3
+                      id="super-company-edit-title"
+                      className={`mt-1 ${claudeSectionHeadingClass}`}
+                    >
+                      Editar nombre
+                    </h3>
+                    {superCompanyEdit ? (
+                      <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
+                        Schema:{' '}
+                        <span className="font-semibold text-[#57534e] dark:text-[#cbd5e1]">{superCompanyEdit.schema_name}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </header>
+
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[#fffdfa] px-4 py-4 dark:bg-[#111a2b] sm:px-5 sm:py-5">
+                <div className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-4 dark:border-[#273244] dark:bg-[#111a2b] sm:p-5">
+                  <div className="min-w-0">
+                    <Label htmlFor="super-company-edit-name" className="text-xs sm:text-sm">
+                      Nombre comercial
+                    </Label>
+                    <Input
+                      id="super-company-edit-name"
+                      value={superCompanyEditName}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setSuperCompanyEditName(e.target.value)}
+                      className="mt-2 w-full rounded-xl bg-white dark:bg-[#0f172a]"
+                    />
+                  </div>
+                  {superCompanyEditError ? (
+                    <p className="mt-3 text-xs font-medium text-red-600 dark:text-red-400" role="alert">
+                      {superCompanyEditError}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="shrink-0 border-t border-[#e7ded0] bg-[#fcfaf6] px-4 py-3 dark:border-[#273244] dark:bg-[#0f172a]/70 sm:px-5">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSuperCompanyEdit(null)}
+                    disabled={superCompanyEditSaving}
+                    className={secondaryOutlineBtnClass}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveSuperCompanyEdit()}
+                    disabled={
+                      superCompanyEditSaving ||
+                      !superCompanyEditName.trim() ||
+                      !!(superCompanyEdit && superCompanyEditName.trim() === superCompanyEdit.name.trim())
+                    }
+                    className={`${superPanelPrimaryActionClass} disabled:cursor-not-allowed`}
+                  >
+                    {superCompanyEditSaving ? 'Guardando…' : 'Guardar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </Modal>
+
+          <Modal
+            mobileBottomSheet
+            isOpen={!!superCompanyDelete}
+            onClose={() => {
+              if (superCompanyDeleting) return;
+              setSuperCompanyDelete(null);
+            }}
+            closeOnBackdropClick={false}
+            closeOnEscape={!superCompanyDeleting}
+            ariaLabelledBy="super-company-delete-title"
+            closeButtonClassName="!h-8 !w-8 !rounded-xl border-[#e7ded0]/90 bg-[#fcfaf6]/95 text-[#78716c] shadow-none hover:bg-[#efe9de] hover:text-[#44403c] dark:border-[#334155] dark:bg-[#1e293b]/90 dark:text-[#94a3b8] dark:hover:bg-[#334155]/80 dark:hover:text-[#e2e8f0] sm:!right-4 sm:!top-4 sm:!h-9 sm:!w-9"
+            className="self-center w-full max-w-[min(100vw-1.25rem,26rem)] overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa] p-0 shadow-[0_24px_60px_-28px_rgba(28,25,23,0.35)] dark:border-[#334155] dark:bg-[#111827] dark:shadow-[0_24px_60px_-30px_rgba(0,0,0,0.55)]"
+          >
+            <header className="relative shrink-0 border-b border-[#e7ded0] bg-gradient-to-br from-[#fffdfa] via-[#fcfaf6] to-[#fff3e8]/90 px-4 pb-4 pt-5 pr-14 dark:border-[#334155] dark:from-[#111827] dark:via-[#0f172a] dark:to-[#111827] sm:px-6 sm:pb-5 sm:pt-6 sm:pr-16">
+              <div className="pointer-events-none absolute left-0 top-0 h-0.5 w-full bg-[#ff801f]" aria-hidden />
+              <div className="relative flex items-center gap-3 sm:gap-4">
+                <span
+                  className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/[0.12] text-red-600 shadow-sm ring-1 ring-red-500/20 dark:bg-red-500/15 dark:text-red-400 dark:ring-red-400/25"
+                  aria-hidden
+                >
+                  <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+                    <path d="M3 6h18" strokeLinecap="round" />
+                    <path d="M8 6V4h8v2" strokeLinecap="round" />
+                    <path d="M6 6l1 16h10l1-16" strokeLinejoin="round" />
+                    <path d="M10 11v6M14 11v6" strokeLinecap="round" />
+                  </svg>
+                </span>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <p className={sectionLabelClass}>Confirmación</p>
+                  <h3
+                    id="super-company-delete-title"
+                    className="mt-1 text-base font-semibold leading-snug tracking-tight text-[#1c1917] dark:text-[#f8fafc]"
+                    style={claudeSansStyle}
+                  >
+                    Eliminar empresa
+                  </h3>
+                </div>
+              </div>
+            </header>
+
+            <div className="space-y-4 px-4 py-5 sm:px-6 sm:py-6">
+              <p className="text-sm leading-relaxed text-[#57534e] dark:text-[#b7c1d1]">
+                ¿Seguro que deseas eliminar{' '}
+                <span className="font-semibold text-[#1c1917] dark:text-white">{superCompanyDelete?.name}</span>?
+              </p>
+
+              {(superCompanyDelete?.users_count ?? 0) > 0 ? (
+                <div
+                  className="rounded-xl border border-amber-200/90 bg-amber-50/95 px-3.5 py-3 dark:border-amber-500/40 dark:bg-amber-950/35"
+                  role="alert"
+                >
+                  <p className="text-xs font-medium leading-relaxed text-amber-950 dark:text-amber-50/95">
+                    Esta empresa tiene{' '}
+                    <span className="font-semibold">{superCompanyDelete?.users_count}</span> usuario(s) asignado(s).
+                    El sistema no la borra hasta que no quede nadie. Desasigna usuarios en esta pantalla y vuelve a
+                    intentar.
+                  </p>
+                </div>
+              ) : null}
+
+              <div
+                className="rounded-xl border border-red-200/90 bg-red-50/90 px-3.5 py-3 dark:border-red-500/35 dark:bg-red-950/40"
+                role="status"
+              >
+                <p className="text-xs font-medium leading-relaxed text-red-900 dark:text-red-100/95">
+                  <span className="font-semibold">No se puede deshacer.</span> Se eliminará el tenant y el schema{' '}
+                  <span className="rounded-md bg-white/80 px-1.5 py-0.5 font-mono text-[11px] text-red-950 dark:bg-black/30 dark:text-red-50">
+                    {superCompanyDelete?.schema_name}
+                  </span>
+                  .
+                </p>
+              </div>
+            </div>
+
+            <footer className="flex flex-col-reverse gap-2 border-t border-[#e7ded0] bg-[#fcfaf6]/80 px-4 py-4 dark:border-[#334155] dark:bg-[#0f172a]/80 sm:flex-row sm:justify-end sm:gap-3 sm:px-6">
+              <button
+                type="button"
+                onClick={() => setSuperCompanyDelete(null)}
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-[#e7ded0] bg-white px-4 text-sm font-semibold text-[#57534e] transition-colors hover:bg-[#fffdf8] disabled:opacity-50 dark:border-[#334155] dark:bg-[#1e293b] dark:text-[#e5e7eb] dark:hover:bg-[#334155]/80 sm:w-auto sm:min-h-[42px]"
+                disabled={superCompanyDeleting}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmSuperCompanyDelete()}
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-red-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500/40 disabled:opacity-60 sm:w-auto sm:min-h-[42px]"
+                disabled={superCompanyDeleting || (superCompanyDelete?.users_count ?? 0) > 0}
+              >
+                {superCompanyDeleting ? 'Eliminando…' : 'Eliminar empresa'}
+              </button>
+            </footer>
           </Modal>
 
           <Modal

@@ -498,14 +498,27 @@ export default function OrdenServicioModal({
     setDeletingPhoto(true);
     try {
       if (removedRef && isOrdenPhotoStorageRef(removedRef)) {
-        await fetch(apiUrl("/api/ordenes/delete-image/"), {
+        const delRes = await fetch(apiUrl("/api/ordenes/delete-image/"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
+          credentials: "include",
           body: JSON.stringify({ key: removedRef }),
         });
+        if (!delRes.ok) {
+          let msg = "No se pudo eliminar la foto del almacenamiento.";
+          try {
+            const err = await delRes.json();
+            msg = (typeof err?.detail === "string" && err.detail) || msg;
+          } catch {
+            /* ignore */
+          }
+          setModalAlert({ show: true, variant: "error", title: "Error al eliminar foto", message: msg });
+          setTimeout(() => setModalAlert((p) => ({ ...p, show: false })), 5000);
+          return;
+        }
       }
       if (orden?.id) {
         const response = await fetch(apiUrl(`/api/ordenes/${orden.id}/update-photos/`), {
@@ -514,6 +527,7 @@ export default function OrdenServicioModal({
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
+          credentials: "include",
           body: JSON.stringify({ fotos_refs: updatedRefs }),
         });
         if (response.ok) {

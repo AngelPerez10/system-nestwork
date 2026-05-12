@@ -12,7 +12,7 @@ import io
 import logging
 import re
 import uuid
-from typing import BinaryIO
+from typing import BinaryIO, Iterable
 
 from django.conf import settings
 from django.core.files.uploadedfile import InMemoryUploadedFile
@@ -114,6 +114,34 @@ def delete_object_for_tenant(key: str) -> None:
     _assert_key_belongs_to_tenant(key)
     client = _client()
     client.delete_object(Bucket=settings.R2_BUCKET_NAME, Key=key.strip())
+
+
+def is_r2_storage_ref(ref: str) -> bool:
+    """True if ``ref`` is an object key we store in R2 (not a URL or data URL)."""
+    s = (ref or "").strip()
+    if not s:
+        return False
+    return not (
+        s.startswith("http://") or s.startswith("https://") or s.startswith("data:")
+    )
+
+
+def delete_tenant_photo_refs(refs: Iterable[str]) -> None:
+    """
+    Best-effort delete for stored object keys. Skips legacy URLs and logs failures.
+    """
+    if not r2_enabled():
+        return
+    for ref in refs:
+        s = (ref or "").strip()
+        if not is_r2_storage_ref(s):
+            continue
+        try:
+            delete_object_for_tenant(s)
+        except PermissionError:
+            logger.warning("R2 delete permission denied for key=%s", s)
+        except Exception as exc:
+            logger.warning("R2 delete failed for key=%s: %s", s, exc)
 
 
 def signed_url_for_key(key: str, expires: int | None = None) -> str:

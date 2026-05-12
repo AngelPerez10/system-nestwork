@@ -66,12 +66,16 @@ class SecureFileValidator:
         validate_dimensions: bool = False,
         max_width: int = MAX_IMAGE_WIDTH,
         max_height: int = MAX_IMAGE_HEIGHT,
+        min_width: int = MIN_IMAGE_WIDTH,
+        min_height: int = MIN_IMAGE_HEIGHT,
     ):
         self.allowed_types = allowed_types
         self.max_size = max_size
         self.validate_dimensions = validate_dimensions
         self.max_width = max_width
         self.max_height = max_height
+        self.min_width = min_width
+        self.min_height = min_height
     
     def validate(self, file: InMemoryUploadedFile) -> Tuple[bool, str]:
         """
@@ -210,11 +214,11 @@ class SecureFileValidator:
                     )
                     return False, f"La imagen excede las dimensiones máximas ({self.max_width}x{self.max_height})"
                 
-                if width < self.MIN_IMAGE_WIDTH or height < self.MIN_IMAGE_HEIGHT:
+                if width < self.min_width or height < self.min_height:
                     logger.warning(
                         f"Image dimensions too small: {width}x{height}"
                     )
-                    return False, f"La imagen es muy pequeña (mín: {self.MIN_IMAGE_WIDTH}x{self.MIN_IMAGE_HEIGHT})"
+                    return False, f"La imagen es muy pequeña (mín: {self.min_width}x{self.min_height})"
                 
                 # Check for bomb images (decompression bomb)
                 img.verify()
@@ -245,8 +249,12 @@ class SecureFileValidator:
             logger.warning("Potential XSS attack in file")
             return False, "El archivo contiene contenido sospechoso"
         
-        # Check for null bytes (path traversal attempt)
-        if b'\x00' in content[:1024]:
+        # Check for null bytes (path traversal attempt). Binary image formats
+        # (e.g. JPEG/JFIF) legitimately contain 0x00 in the first KB; skip for image-only validators.
+        image_only = self.allowed_types and all(
+            isinstance(t, str) and t.startswith("image/") for t in self.allowed_types
+        )
+        if not image_only and b"\x00" in content[:1024]:
             logger.warning("Null byte detected in file")
             return False, "El archivo contiene bytes inválidos"
         

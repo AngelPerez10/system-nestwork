@@ -17,6 +17,8 @@ interface ModalProps {
   ariaLabel?: string;
   /** ID of the element that labels the dialog (e.g. a heading). Preferred over ariaLabel. */
   ariaLabelledBy?: string;
+  /** Extra classes for the close control (e.g. smaller hit area on compact dialogs). */
+  closeButtonClassName?: string;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -31,6 +33,7 @@ export const Modal: React.FC<ModalProps> = ({
   mobileBottomSheet = false,
   ariaLabel,
   ariaLabelledBy,
+  closeButtonClassName,
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -129,7 +132,7 @@ export const Modal: React.FC<ModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="absolute right-3 top-3 z-999 flex h-9.5 w-9.5 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-black dark:border-[#d6ebfd]/20 dark:bg-transparent dark:text-[#a1a4a5] dark:hover:bg-white/10 dark:hover:text-[#f0f0f0] sm:right-6 sm:top-6 sm:h-11 sm:w-11"
+              className={`absolute right-3 top-3 z-999 flex h-9.5 w-9.5 items-center justify-center rounded-full border border-gray-300 bg-white text-gray-500 transition-colors hover:bg-black/[0.04] hover:text-black dark:border-[#d6ebfd]/20 dark:bg-transparent dark:text-[#a1a4a5] dark:hover:bg-white/10 dark:hover:text-[#f0f0f0] sm:right-6 sm:top-6 sm:h-11 sm:w-11 ${closeButtonClassName ?? ""}`}
             >
               <svg
                 width="24"

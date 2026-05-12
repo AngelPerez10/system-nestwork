@@ -135,6 +135,8 @@ def ordenes_detail(request, orden_id: int):
     if request.method == "GET":
         return Response(orden_public_dict(row))
     if request.method == "DELETE":
+        old_refs = normalize_fotos_refs_list(row.get("fotos_refs") if isinstance(row.get("fotos_refs"), list) else [])
+        r2_storage.delete_tenant_photo_refs(old_refs)
         _write_list("ordenes", [r for r in rows if int(r.get("id", 0)) != orden_id])
         return Response(status=204)
 
@@ -155,6 +157,10 @@ def ordenes_detail(request, orden_id: int):
             assert_max_fotos(refs)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=400)
+        old_refs = normalize_fotos_refs_list(row.get("fotos_refs") if isinstance(row.get("fotos_refs"), list) else [])
+        new_set = set(refs)
+        removed = [r for r in old_refs if r not in new_set]
+        r2_storage.delete_tenant_photo_refs(removed)
         row["fotos_refs"] = refs
 
     row.update(patch)
@@ -269,6 +275,10 @@ def ordenes_update_photos(request, orden_id: int):
         assert_max_fotos(refs)
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=400)
+    old_refs = normalize_fotos_refs_list(row.get("fotos_refs") if isinstance(row.get("fotos_refs"), list) else [])
+    new_set = set(refs)
+    removed = [r for r in old_refs if r not in new_set]
+    r2_storage.delete_tenant_photo_refs(removed)
     row["fotos_refs"] = refs
     strip_legacy_fotos_urls_from_store(row)
     _write_list("ordenes", rows)
