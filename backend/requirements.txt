@@ -63,5 +63,5 @@ pytest==8.4.1
 pytest-django==4.11.1
 black==25.1.0
 ruff==0.11.0
-mypy==1.15.0
+mypy==2.0.0
 bandit==1.8.3
