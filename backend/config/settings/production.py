@@ -49,6 +49,32 @@ def _origin_from_url(url: str) -> str | None:
     return None
 
 
+def _dedupe_origins(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for v in values:
+        if not v or v in seen:
+            continue
+        seen.add(v)
+        out.append(v)
+    return out
+
+
+def _normalize_origin_list(raw: list[str] | tuple[str, ...] | None) -> list[str]:
+    """Strip env junk; trailing slashes on origins break browser Origin matching."""
+    out: list[str] = []
+    for item in raw or []:
+        s = str(item).strip().strip('"').strip("'")
+        if not s:
+            continue
+        origin = _origin_from_url(s)
+        if origin:
+            out.append(origin)
+        else:
+            out.append(s.rstrip("/"))
+    return _dedupe_origins(out)
+
+
 _rh, _render_base_origin = _render_external_url_parts()
 # Only merge when set on the host env (Render dashboard / shell), not Django's default from base.py.
 _frontend_origin = _origin_from_url((os.environ.get("FRONTEND_BASE_URL") or "").strip())
@@ -99,11 +125,11 @@ SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"  # Security: Prevent popup att
 CSP_UPGRADE_INSECURE = True
 
 # Exact origins only (no wildcards): API host + optional FRONTEND_BASE_URL from env.
-_cors = list(CORS_ALLOWED_ORIGINS) if CORS_ALLOWED_ORIGINS else []
+_cors = _normalize_origin_list(list(CORS_ALLOWED_ORIGINS) if CORS_ALLOWED_ORIGINS else [])
 for _o in (_render_base_origin, _frontend_origin):
     if _o and _o not in _cors:
         _cors.append(_o)
-CORS_ALLOWED_ORIGINS = _cors
+CORS_ALLOWED_ORIGINS = _dedupe_origins(_cors)
 
 if not CORS_ALLOWED_ORIGINS:
     raise ValueError(
@@ -112,12 +138,12 @@ if not CORS_ALLOWED_ORIGINS:
         "or set CORS_ALLOWED_ORIGINS / ensure RENDER_EXTERNAL_URL is set."
     )
 
-CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+CSRF_TRUSTED_ORIGINS = _normalize_origin_list(env.list("CSRF_TRUSTED_ORIGINS", default=[]))
 _csrf = list(CSRF_TRUSTED_ORIGINS)
 for _o in (_render_base_origin, _frontend_origin):
     if _o and _o not in _csrf:
         _csrf.append(_o)
-CSRF_TRUSTED_ORIGINS = _csrf
+CSRF_TRUSTED_ORIGINS = _dedupe_origins(_csrf)
 
 if not CSRF_TRUSTED_ORIGINS:
     raise ValueError(

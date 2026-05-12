@@ -103,12 +103,14 @@ if _db_password in _default_db_passwords and not env.bool("DJANGO_DEBUG", defaul
 
 MIDDLEWARE = [
     "config.middleware.HostHeaderValidationMiddleware",  # Security: Validate Host BEFORE tenant resolution
+    # CORS must run before any middleware that can return a response (tenant 404, CommonMiddleware, etc.)
+    # or preflight OPTIONS never gets Access-Control-Allow-Origin — see django-cors-headers README.
+    "corsheaders.middleware.CorsMiddleware",
     "config.middleware.HealthCheckMiddleware",  # Liveness before tenant (no Domain row required)
     "django_tenants.middleware.main.TenantMainMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "config.middleware.ContentSecurityPolicyMiddleware",  # Security: CSP headers (OWASP 2025: A02)
     "django.contrib.sessions.middleware.SessionMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
