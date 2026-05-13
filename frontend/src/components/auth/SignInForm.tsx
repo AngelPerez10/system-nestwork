@@ -29,8 +29,31 @@ async function login(loginValue: string, password: string): Promise<LoginRespons
         : { username: loginValue, password }
     ),
   });
-  const data = await res.json().catch(() => ({ detail: "Respuesta inválida" }));
-  if (!res.ok) throw new Error(data.detail || "Error");
+  const data = (await res.json().catch(() => ({ detail: "Respuesta inválida" }))) as {
+    detail?: string;
+    code?: string;
+  };
+  if (!res.ok) {
+    const code = typeof data.code === "string" ? data.code : "";
+    const detail = typeof data.detail === "string" ? data.detail : "Error";
+    if (code === "user_not_found") {
+      throw new Error(
+        "No hay cuenta con ese correo o usuario en esta empresa. Si acabas de crear el tenant, pide a un administrador que vincule tu usuario (comando bootstrap_api_tenant --grant-email) o regístrate desde Registrar mi empresa."
+      );
+    }
+    if (code === "tenant_not_member") {
+      throw new Error(
+        "Tu usuario no pertenece a esta empresa. Contacta al administrador para que te asignen a la organización correcta."
+      );
+    }
+    if (code === "bad_credentials") {
+      throw new Error("Contraseña incorrecta. Revisa mayúsculas y espacios.");
+    }
+    if (code === "account_inactive") {
+      throw new Error("Cuenta desactivada. Contacta al administrador.");
+    }
+    throw new Error(detail);
+  }
   return data as LoginResponse;
 }
 

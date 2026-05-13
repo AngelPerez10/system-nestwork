@@ -173,7 +173,7 @@ def login(request):
             schema_name=tenant_schema_name(),
             ip_address=request.META.get("REMOTE_ADDR"),
         )
-        return Response({"detail": "Contraseña requerida"}, status=400)
+        return Response({"detail": "Contraseña requerida", "code": "password_required"}, status=400)
     if not email and not username:
         audit_security_event(
             actor=None,
@@ -181,7 +181,7 @@ def login(request):
             schema_name=tenant_schema_name(),
             ip_address=request.META.get("REMOTE_ADDR"),
         )
-        return Response({"detail": "Correo o usuario requerido"}, status=400)
+        return Response({"detail": "Correo o usuario requerido", "code": "identity_required"}, status=400)
 
     User = get_user_model()
     if email:
@@ -194,7 +194,10 @@ def login(request):
                 ip_address=request.META.get("REMOTE_ADDR"),
                 metadata={"reason": "email_not_found"},
             )
-            return Response({"detail": "Credenciales inválidas"}, status=401)
+            return Response(
+                {"detail": "Usuario no encontrado", "code": "user_not_found"},
+                status=401,
+            )
         user = authenticate(request, username=u.get_username(), password=password)
     else:
         u = User.objects.filter(username__iexact=username).first()
@@ -206,7 +209,10 @@ def login(request):
                 ip_address=request.META.get("REMOTE_ADDR"),
                 metadata={"reason": "username_not_found"},
             )
-            return Response({"detail": "Credenciales inválidas"}, status=401)
+            return Response(
+                {"detail": "Usuario no encontrado", "code": "user_not_found"},
+                status=401,
+            )
         user = authenticate(request, username=u.get_username(), password=password)
 
     if user is None:
@@ -217,7 +223,10 @@ def login(request):
             ip_address=request.META.get("REMOTE_ADDR"),
             metadata={"reason": "bad_credentials"},
         )
-        return Response({"detail": "Credenciales inválidas"}, status=401)
+        return Response(
+            {"detail": "Contraseña incorrecta", "code": "bad_credentials"},
+            status=401,
+        )
     if not user.is_active:
         audit_security_event(
             actor=user,
@@ -225,7 +234,10 @@ def login(request):
             schema_name=tenant_schema_name(),
             ip_address=request.META.get("REMOTE_ADDR"),
         )
-        return Response({"detail": "Cuenta desactivada"}, status=401)
+        return Response(
+            {"detail": "Cuenta desactivada", "code": "account_inactive"},
+            status=401,
+        )
 
     schema = (getattr(getattr(connection, "tenant", None), "schema_name", None) or connection.schema_name or "public").strip()
     if schema != "public":
@@ -240,7 +252,13 @@ def login(request):
                     schema_name=schema,
                     ip_address=request.META.get("REMOTE_ADDR"),
                 )
-                return Response({"detail": "Usuario no pertenece a esta empresa"}, status=401)
+                return Response(
+                    {
+                        "detail": "Usuario no pertenece a esta empresa",
+                        "code": "tenant_not_member",
+                    },
+                    status=401,
+                )
 
     refresh = RefreshToken.for_user(user)
     profile = get_or_create_profile(user)
