@@ -266,7 +266,7 @@ def users_accounts(request):
         return Response({"detail": "El usuario ya existe"}, status=400)
 
     schema = tenant_schema_name()
-    if schema != "public":
+    if schema != "public" and not is_platform_superadmin(request.user):
         with schema_context("public"):
             org = Organization.objects.filter(schema_name=schema).first()
             members_count = (
@@ -327,6 +327,15 @@ def users_accounts(request):
             profile = get_or_create_profile(user)
             profile.permissions = default_permissions_for_user(user)
             profile.save(update_fields=["permissions"])
+    except Exception as e:
+        logger.exception(
+            "Error creating user",
+            extra={"security": "user_create_failed", "username": username, "schema": schema},
+        )
+        return Response(
+            {"detail": f"Error interno al crear usuario: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     
     audit_security_event(
         actor=request.user,

@@ -752,7 +752,7 @@ export default function TareasTecnicoPage() {
 
   return (
     <>
-      <PageMeta title="Mis tareas" description="Tareas asignadas al tÃ©cnico" />
+      <PageMeta title="Mis tareas" description="Tareas asignadas al técnico" />
       <div className="min-h-[calc(100dvh-5rem)] overflow-x-hidden">
         <div
           className="mx-auto w-full max-w-[min(100%,1920px)] space-y-6 px-3 pb-10 pt-6 text-sm sm:space-y-7 sm:px-5 sm:pb-12 sm:pt-7 sm:text-base md:px-6 lg:px-8 xl:px-10 2xl:max-w-[min(100%,2200px)]"
@@ -851,7 +851,7 @@ export default function TareasTecnicoPage() {
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por descripciÃ³n o responsableâ€¦"
+                placeholder="Buscar por descripción o responsable…"
                 className={searchInputClass}
                 aria-label="Buscar tareas"
               />
@@ -859,7 +859,7 @@ export default function TareasTecnicoPage() {
                 <button
                   type="button"
                   onClick={() => setSearchTerm("")}
-                  aria-label="Limpiar bÃºsqueda"
+                  aria-label="Limpiar búsqueda"
                   className="absolute inset-y-0 right-0 my-1.5 mr-1.5 inline-flex h-8 min-w-[36px] items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/[0.06] sm:h-9 sm:min-w-[40px]"
                 >
                   <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
@@ -895,7 +895,7 @@ export default function TareasTecnicoPage() {
           <ComponentCard
             compact
             title="Tablero Kanban"
-            desc="Arrastra tarjetas entre columnas para actualizar el estado. Solo puede editar o eliminar las tareas que le pertenecen. En mÃ³vil use el listado inferior."
+            desc="Arrastra tarjetas entre columnas para actualizar el estado. Solo puede editar o eliminar las tareas que le pertenecen. En móvil use el listado inferior."
             className="overflow-hidden border-[#e7ded0] bg-[#fffdfa]/95 shadow-[0_30px_80px_-40px_rgba(28,25,23,0.22)] dark:border-[#273244] dark:bg-[#111827]/80 dark:shadow-[0_30px_80px_-45px_rgba(0,0,0,0.5)]"
           >
             {!canTareasView ? (
@@ -1071,7 +1071,7 @@ export default function TareasTecnicoPage() {
 
                                   <div className="mt-2 flex flex-wrap gap-1.5 pt-1">
                                     <button type="button" onClick={() => openDescripcionModal(tarea)} className="text-[11px] font-medium text-[#ff801f] dark:text-[#ffa057] hover:underline">
-                                      DescripciÃ³n
+                                      Descripción
                                     </button>
                                     {Array.isArray(tarea.fotos_urls) && tarea.fotos_urls.length > 0 && (
                                       <button type="button" onClick={() => openFotosModal(tarea)} className="text-[11px] font-medium text-[#ff801f] dark:text-[#ffa057] hover:underline">
@@ -1140,10 +1140,10 @@ export default function TareasTecnicoPage() {
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <p className={sectionLabelClass}>Mi escritorio Â· Mis tareas</p>
+                  <p className={sectionLabelClass}>Mi escritorio · Mis tareas</p>
                   {editingTarea ? (
                     <span className="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-400">
-                      EdiciÃ³n
+                      Edición
                     </span>
                   ) : (
                     <span className="inline-flex items-center rounded-md bg-[#ff801f]/10 px-2 py-0.5 text-[10px] font-medium text-[#ff801f] dark:text-[#ffa057]">
@@ -1165,7 +1165,7 @@ export default function TareasTecnicoPage() {
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 custom-scrollbar">
               <section className={modalPanelClass}>
                 <div className="mb-4 flex flex-col gap-0.5 border-b border-gray-100/90 pb-3 dark:border-white/[0.06]">
-                  <p className={sectionLabelClass}>AsignaciÃ³n</p>
+                  <p className={sectionLabelClass}>Asignación</p>
                   <p className="text-sm font-semibold text-gray-900 dark:text-white">Persona responsable</p>
                   <p className="text-xs text-gray-500 dark:text-gray-400">En esta vista las tareas se registran siempre a su usuario.</p>
                 </div>
@@ -1182,8 +1182,8 @@ export default function TareasTecnicoPage() {
 
               <section className={modalPanelClass}>
                 <div className="mb-3 border-b border-gray-100/90 pb-3 dark:border-white/[0.06]">
-                  <p className={sectionLabelClass}>DescripciÃ³n</p>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">QuÃ© hay que hacer y en quÃ© contexto.</p>
+                  <p className={sectionLabelClass}>Descripción</p>
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Qué hay que hacer y en qué contexto.</p>
                 </div>
                 <label htmlFor="descripcion-tecnico" className={modalFieldLabelClass}>
                   Detalle de la tarea<span className={modalRequiredMark}>*</span>
@@ -1290,11 +1290,11 @@ export default function TareasTecnicoPage() {
                 </svg>
               </span>
               <div>
-                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Confirmar eliminaciÃ³n</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Esta acciÃ³n no se puede deshacer.</p>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Confirmar eliminación</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Esta acción no se puede deshacer.</p>
               </div>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">Â¿EstÃ¡s seguro de que deseas eliminar esta tarea?</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">¿Estás seguro de que deseas eliminar esta tarea?</p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={handleCancelDelete}
@@ -1331,10 +1331,10 @@ export default function TareasTecnicoPage() {
               </span>
               <div>
                 <h3 className="text-base font-semibold text-gray-900 dark:text-white">Eliminar foto</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Se eliminarÃ¡ permanentemente.</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Se eliminará permanentemente.</p>
               </div>
             </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">Â¿EstÃ¡s seguro de que deseas eliminar esta foto?</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">¿Estás seguro de que deseas eliminar esta foto?</p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setConfirmDelete({ open: false, index: null, url: null })}
@@ -1375,7 +1375,7 @@ export default function TareasTecnicoPage() {
                   </svg>
                 </span>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">DescripciÃ³n</h3>
+                  <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Descripción</h3>
                   <p className="text-[11px] text-gray-500 dark:text-gray-400">Detalle completo de la tarea</p>
                 </div>
               </div>
@@ -1409,7 +1409,7 @@ export default function TareasTecnicoPage() {
                 </span>
                 <div className="min-w-0">
                   <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Fotos</h3>
-                  <p className="text-[11px] text-gray-500 dark:text-gray-400">ImÃ¡genes adjuntas a la tarea</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400">Imágenes adjuntas a la tarea</p>
                 </div>
               </div>
             </div>
@@ -1426,7 +1426,7 @@ export default function TareasTecnicoPage() {
                     >
                       <img src={url} alt={`Foto ${idx + 1}`} className="h-40 w-full object-cover" />
                       <div className="absolute inset-x-0 bottom-0 p-2 bg-linear-to-t from-black/40 to-transparent">
-                        <div className="text-[11px] text-white/95">Ver en tamaÃ±o completo</div>
+                        <div className="text-[11px] text-white/95">Ver en tamaño completo</div>
                       </div>
                     </a>
                   ))}

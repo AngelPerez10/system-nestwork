@@ -92,6 +92,43 @@ else:
         }
     }
 
+# TLS to managed PostgreSQL (Render, Neon, etc.) from a laptop / CI.
+# Set POSTGRES_SSLMODE=require|verify-full|disable in .env to override auto-detection.
+_valid_sslmodes = frozenset({"disable", "allow", "prefer", "require", "verify-ca", "verify-full"})
+
+
+def _merge_postgres_ssl_options() -> None:
+    cfg = DATABASES.get("default")
+    if not isinstance(cfg, dict):
+        return
+    host = str(cfg.get("HOST") or "").lower()
+    explicit = env.str("POSTGRES_SSLMODE", default="").strip().lower()
+    if explicit:
+        sslmode = explicit if explicit in _valid_sslmodes else ""
+    elif any(
+        s in host
+        for s in (
+            "render.com",
+            "neon.tech",
+            "supabase.co",
+            "pooler.supabase.com",
+            "amazonaws.com",  # RDS hostname pattern
+        )
+    ):
+        sslmode = "require"
+    elif host in ("localhost", "127.0.0.1", ""):
+        sslmode = ""
+    else:
+        sslmode = ""
+    if not sslmode:
+        return
+    opts = dict(cfg.get("OPTIONS") or {})
+    opts["sslmode"] = sslmode
+    cfg["OPTIONS"] = opts
+
+
+_merge_postgres_ssl_options()
+
 # Security: Reject default DB credentials in production
 _db_password = DATABASES["default"]["PASSWORD"]
 _default_db_passwords = {"erp", "password", "postgres", "admin", "root", "123456"}

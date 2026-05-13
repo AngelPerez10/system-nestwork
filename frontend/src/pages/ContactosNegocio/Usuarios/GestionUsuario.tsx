@@ -10,6 +10,7 @@ import SignaturePad from '@/components/ui/signature/SignaturePad';
 import { apiUrl } from '@/config/api';
 import { useAuth } from '@/context/AuthContext';
 import { EyeCloseIcon, EyeIcon, MoreDotIcon } from '@/icons';
+import { motion, AnimatePresence } from 'motion/react';
 
 type Role = 'admin' | 'tecnico';
 
@@ -130,6 +131,27 @@ const sectionLabelClass =
   "text-[11px] font-semibold uppercase tracking-[0.16em] text-[#78716c] dark:text-[#8ea0b8] sm:text-xs";
 
 const claudeSansStyle = { fontFamily: "Outfit, sans-serif" } as const;
+
+const fadeInUp = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] },
+};
+
+const staggerContainer = {
+  animate: {
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 0.04,
+    },
+  },
+};
+
+const cardEnter = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
+};
 
 const primaryOrangeBtnClass =
   "inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-[#ff801f] px-5 py-2.5 text-sm font-semibold text-black shadow-none transition-colors hover:bg-[#ff6a00] focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 active:brightness-95 sm:w-auto sm:min-h-0";
@@ -316,6 +338,7 @@ const seedAdminPerms = async (userId: number) => {
   };
   const res = await fetch(apiUrl(`/api/users/accounts/${userId}/permissions/`), {
     method: 'PUT',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...getAuthHeaders(),
@@ -497,6 +520,7 @@ export default function UserProfiles() {
     try {
       const res = await fetch(apiUrl(`/api/users/accounts/${u.id}/permissions/`), {
         method: 'GET',
+        credentials: 'include',
         headers: { ...getAuthHeaders() },
         cache: 'no-store' as RequestCache,
       });
@@ -551,6 +575,7 @@ export default function UserProfiles() {
 
       const res = await fetch(apiUrl(`/api/users/accounts/${permsUser.id}/permissions/`), {
         method: 'PUT',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
@@ -617,6 +642,7 @@ export default function UserProfiles() {
         safety += 1;
         const res: Response = await fetch(nextUrl, {
           method: 'GET',
+          credentials: 'include',
           headers: { ...getAuthHeaders() },
           cache: 'no-store' as RequestCache,
         });
@@ -735,6 +761,9 @@ export default function UserProfiles() {
     },
     [currentUserEmail, currentUsername]
   );
+
+  /** Alineado con backend `is_platform_superadmin`: superadmin de plataforma o cuenta operador Angel. */
+  const isElevatedSuperadmin = isPlatformSuperuser || isAngelSuperadmin;
 
   const loadSuperadminData = useCallback(async () => {
     if (!isPlatformSuperuser && !isAngelSuperadmin) return;
@@ -917,7 +946,7 @@ export default function UserProfiles() {
   }, [companyUsers]);
 
   const createLimitReason = useMemo(() => {
-    if (isPlatformSuperuser) return null;
+    if (isElevatedSuperadmin) return null;
     if (companyRoleStats.total >= MAX_USERS_PER_EMPRESA) {
       return 'Tu plan actual permite máximo 3 usuarios por empresa (1 administrador y 2 técnicos).';
     }
@@ -928,12 +957,12 @@ export default function UserProfiles() {
       return 'Tu empresa ya alcanzó el límite de 2 técnicos.';
     }
     return null;
-  }, [companyRoleStats.admins, companyRoleStats.tecnicos, companyRoleStats.total, form.role, isPlatformSuperuser]);
+  }, [companyRoleStats.admins, companyRoleStats.tecnicos, companyRoleStats.total, form.role, isElevatedSuperadmin]);
 
   const companySchemaPreview = useMemo(() => buildSchemaFromCompanyName(companyForm.name), [companyForm.name]);
 
   const openCreate = () => {
-    if (companyRoleStats.total >= MAX_USERS_PER_EMPRESA && !isPlatformSuperuser) {
+    if (companyRoleStats.total >= MAX_USERS_PER_EMPRESA && !isElevatedSuperadmin) {
       setError('Tu plan actual permite máximo 3 usuarios por empresa (1 administrador y 2 técnicos).');
       return;
     }
@@ -1051,7 +1080,7 @@ export default function UserProfiles() {
   };
 
   const assignUserToCompany = async () => {
-    if (!isPlatformSuperuser) return;
+    if (!isElevatedSuperadmin) return;
     if (!assignUserId || !assignCompanyId) {
       setError('Selecciona usuario y empresa para asignar.');
       return;
@@ -1096,6 +1125,7 @@ export default function UserProfiles() {
     setSignatureLoading(true);
     fetch(apiUrl(`/api/users/accounts/${u.id}/signature/`), {
       method: 'GET',
+      credentials: 'include',
       headers: { ...getAuthHeaders() },
       cache: 'no-store' as RequestCache,
     })
@@ -1129,7 +1159,7 @@ export default function UserProfiles() {
     if (/^\d+$/.test(form.password)) return 'La contraseña no puede ser completamente numérica';
     if (form.password !== form.password2) return 'Confirmación de contraseña no coincide';
 
-    if (!isPlatformSuperuser) {
+    if (!isElevatedSuperadmin) {
       if (companyRoleStats.total >= MAX_USERS_PER_EMPRESA)
         return `Tu plan actual permite máximo ${MAX_USERS_PER_EMPRESA} usuarios por empresa (1 administrador y 2 técnicos).`;
       if (form.role === 'admin' && companyRoleStats.admins >= 1) return 'Tu empresa ya tiene un administrador. Solo se permite 1 administrador por membresía.';
@@ -1153,7 +1183,7 @@ export default function UserProfiles() {
       if (/^\d+$/.test(editForm.password)) return 'La contraseña no puede ser completamente numérica';
       if (editForm.password !== editForm.password2) return 'Confirmación de contraseña no coincide';
     }
-    if (!isPlatformSuperuser && editUser) {
+    if (!isElevatedSuperadmin && editUser) {
       const currentIsAdmin = isAdminUser(editUser);
       const nextIsAdmin = editForm.role === 'admin';
       const adminsAfter = companyRoleStats.admins + (nextIsAdmin ? 1 : 0) - (currentIsAdmin ? 1 : 0);
@@ -1193,6 +1223,7 @@ export default function UserProfiles() {
 
       const res = await fetch(API, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
@@ -1202,13 +1233,16 @@ export default function UserProfiles() {
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.detail || 'Error al crear usuario');
 
-      if (form.role === 'admin' && typeof (data as any)?.id === 'number' && (auth.isAdmin || auth.isSuperadmin)) {
+      if (form.role === 'admin' && typeof (data as any)?.id === 'number' && (auth.isAdmin || isElevatedSuperadmin)) {
         await seedAdminPerms((data as any).id);
       }
 
       setUsers((prev) => [data as UserAccount, ...prev]);
       setSuccess('Usuario creado');
       setIsCreateOpen(false);
+      setIsSuperPanelOpen(false);
+      setForm({ ...emptyForm });
+      setFormError(null);
     } catch (e: any) {
       setFormError(e?.message || 'Error');
     } finally {
@@ -1244,6 +1278,7 @@ export default function UserProfiles() {
 
       const res = await fetch(apiUrl(`/api/users/accounts/${editUser.id}/`), {
         method: 'PATCH',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
@@ -1256,6 +1291,7 @@ export default function UserProfiles() {
       if (hasNewSignature) {
         const resSig = await fetch(apiUrl(`/api/users/accounts/${editUser.id}/signature/`), {
           method: 'PUT',
+          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
             ...getAuthHeaders(),
@@ -1298,6 +1334,7 @@ export default function UserProfiles() {
     try {
       const res = await fetch(apiUrl(`/api/users/accounts/${u.id}/`), {
         method: 'PATCH',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
@@ -1324,6 +1361,7 @@ export default function UserProfiles() {
     try {
       const res = await fetch(apiUrl(`/api/users/accounts/${confirmDeleteId}/`), {
         method: 'DELETE',
+        credentials: 'include',
         headers: {
           ...getAuthHeaders(),
         },
@@ -1357,18 +1395,23 @@ export default function UserProfiles() {
   return (
     <>
       <PageMeta title="Gestión de usuarios | Sistema Grupo Intrax GPS" description="Administración de cuentas, roles, permisos y firma digital" />
-      <div className="min-h-[calc(100dvh-5rem)] overflow-x-hidden pb-[max(0px,env(safe-area-inset-bottom))]">
-        <div
-          className="mx-auto box-border w-full max-w-[min(100%,1920px)] space-y-5 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pb-8 pt-5 text-sm sm:space-y-7 sm:pl-5 sm:pr-5 sm:pb-12 sm:pt-7 sm:text-base md:pl-6 md:pr-6 lg:pl-8 lg:pr-8 lg:pb-12 xl:pl-10 xl:pr-10 2xl:max-w-[min(100%,2200px)]"
+      <div className="min-h-[calc(100dvh-5rem)] overflow-x-hidden">
+        <motion.div
+          className="relative mx-auto w-full max-w-[min(100%,88rem)] space-y-6 px-4 pb-10 pt-6 sm:space-y-8 sm:px-6 sm:pb-12 sm:pt-8 lg:px-8 xl:px-10"
           style={claudeSansStyle}
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
         >
-          <nav
+          {/* Breadcrumbs */}
+          <motion.nav
+            variants={fadeInUp}
             className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-medium text-[#78716c] dark:text-[#8ea0b8] sm:text-[13px]"
             aria-label="Migas de pan"
           >
             <Link
               to="/"
-              className="rounded-md px-1.5 py-0.5 text-[#57534e] transition-colors hover:bg-black/[0.03] hover:text-[#1c1917] dark:text-[#aeb8c8] dark:hover:bg-white/5 dark:hover:text-white"
+              className="rounded-md px-1.5 py-1 text-[#57534e] transition-all duration-200 hover:bg-black/[0.05] hover:text-[#1c1917] dark:text-[#aeb8c8] dark:hover:bg-white/[0.06] dark:hover:text-white"
             >
               Inicio
             </Link>
@@ -1376,44 +1419,67 @@ export default function UserProfiles() {
               /
             </span>
             <span className="text-[#44403c] dark:text-[#cbd5e1]">Usuarios</span>
-          </nav>
+          </motion.nav>
 
-          <header className={`relative flex w-full ${cardShellClass} p-4 sm:p-5 lg:p-6`}>
-            <div className="pointer-events-none absolute right-4 top-4 h-20 w-20 rounded-full bg-[#ff801f]/10 blur-2xl sm:right-6 sm:top-6" />
-            <div className="relative z-[1] flex min-w-0 flex-col items-start gap-4 sm:flex-row sm:items-center sm:gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#ff801f] text-black sm:h-11 sm:w-11">
-                <svg className="h-5 w-5 sm:h-6 sm:w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                  <circle cx="9" cy="7" r="4" />
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
+          {/* Header principal */}
+          <motion.header variants={fadeInUp} className={`${cardShellClass} dark:bg-[#111827]/80 dark:border-[#273244]`}>
+            <div className="relative overflow-hidden">
+              {/* Franja decorativa superior */}
+              <div className="absolute inset-x-0 top-0 h-px bg-[#e7ded0] dark:bg-[#334155]" />
+
+              <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6 sm:p-6 lg:p-8">
+                <div className="flex min-w-0 gap-3.5 sm:gap-4">
+                  {/* Icono del header */}
+                  <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#e2d9ca] bg-white text-[#1c1917] sm:h-12 sm:w-12 dark:border-[#334155] dark:bg-[#111a2b] dark:text-[#f8fafc]">
+                    <svg className="h-5 w-5 sm:h-[18px] sm:w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" aria-hidden>
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                      <circle cx="9" cy="7" r="4" />
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                    <div className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#11ff99] dark:border-black" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className={sectionLabelClass}>Contactos de negocio</p>
+                    <h1 className={`mt-1 ${claudeHeroHeadingClass}`}>
+                      Gestión de usuarios
+                    </h1>
+                    <p className={`mt-2 max-w-xl ${claudeBodyClass}`}>
+                      Crea cuentas, asigna <span className="font-medium text-[#ea580c] dark:text-[#fb923c]">roles</span>, ajusta permisos por módulo y administra la firma digital.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#ea580c] dark:text-[#fb923c] sm:text-[11px]">
-                  Contactos de negocio
-                </p>
-                <h1 className={`mt-0.5 ${claudeHeroHeadingClass}`}>Gestión de usuarios</h1>
-                <p className={`mt-1 max-w-2xl ${claudeBodyClass}`}>
-                  Crea cuentas, asigna <span className="font-medium text-[#ea580c] dark:text-[#fb923c]">roles</span>, ajusta permisos por módulo y administra la firma digital.
-                </p>
-                <div className="mt-3 h-px w-full max-w-xl bg-gradient-to-r from-[#ff801f]/35 via-[#ffbf8d]/30 to-transparent dark:from-[#ff9a52]/35 dark:via-[#64748b]/25 dark:to-transparent" />
-              </div>
             </div>
-          </header>
+          </motion.header>
 
-          {error && (
-            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-              <Alert variant="error" title="Error" message={error} showLink={false} />
-            </div>
-          )}
-          {success && (
-            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-              <Alert variant="success" title="Listo" message={success} showLink={false} />
-            </div>
-          )}
+          {/* Alertas */}
+          <AnimatePresence mode="wait">
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.25 }}
+              >
+                <Alert variant="error" title="Error" message={error} showLink={false} />
+              </motion.div>
+            )}
+            {success && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.25 }}
+              >
+                <Alert variant="success" title="Listo" message={success} showLink={false} />
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+          {/* Stats cards */}
+          <motion.div variants={fadeInUp} className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
             <div className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-3 dark:border-[#273244] dark:bg-[#111a2b]/90 sm:p-4">
               <div className="flex items-center gap-3">
                 <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#e7ded0] bg-white/90 text-[#ea580c] dark:border-[#334155] dark:bg-[#0f172a] dark:text-[#fb923c] sm:h-10 sm:w-10">
@@ -1459,9 +1525,9 @@ export default function UserProfiles() {
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-stretch sm:gap-3 lg:items-center lg:justify-between">
+          <motion.div variants={fadeInUp} className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-stretch sm:gap-3 lg:items-center lg:justify-between">
             <div className="relative min-w-0 w-full shrink-0 sm:min-w-0 sm:flex-1 sm:max-w-none md:min-w-[min(100%,20rem)] lg:max-w-none">
               <svg
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#78716c] dark:text-[#64748b] sm:left-3.5"
@@ -1511,10 +1577,16 @@ export default function UserProfiles() {
                 Nuevo usuario
               </button>
             )}
-            {isPlatformSuperuser && (
+            {isElevatedSuperadmin && (
               <button
                 type="button"
-                onClick={() => setIsSuperPanelOpen(true)}
+                onClick={() => {
+                  setForm({ ...emptyForm });
+                  setFormError(null);
+                  setShowPassword(false);
+                  setShowPassword2(false);
+                  setIsSuperPanelOpen(true);
+                }}
                 className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-[#f5b98d] bg-[#fff3e8] px-4 py-2 text-sm font-semibold text-[#9a3412] shadow-sm transition-colors hover:bg-[#ffe9d4] focus:outline-none focus:ring-2 focus:ring-[#ff801f]/35 dark:border-[#7c2d12]/40 dark:bg-[#7c2d12]/15 dark:text-[#fdba74] dark:hover:bg-[#7c2d12]/25 sm:w-auto"
                 aria-label="Abrir panel super usuario"
               >
@@ -1524,8 +1596,9 @@ export default function UserProfiles() {
                 Panel super usuario
               </button>
             )}
-          </div>
+          </motion.div>
 
+          <motion.div variants={fadeInUp}>
           <ComponentCard
             compact
             title="Listado de usuarios"
@@ -1708,6 +1781,7 @@ export default function UserProfiles() {
 
               return (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <AnimatePresence mode="popLayout">
                 {filteredForView.map((u) => {
                   const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
                   const isAdmin = isAdminUser(u);
@@ -1722,9 +1796,13 @@ export default function UserProfiles() {
                     togglingActiveId === u.id || (isProtectedPrincipalUsername(u.username) && isActive);
 
                   return (
-                    <div
-                      data-anim="user-card"
+                    <motion.div
                       key={u.id}
+                      variants={cardEnter}
+                      initial="initial"
+                      animate="animate"
+                      exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+                      layout
                       className="group relative overflow-hidden rounded-2xl border border-[#e7ded0] bg-[#fffdfa]/95 p-4 shadow-[0_12px_32px_-28px_rgba(28,25,23,0.2)] transition-all hover:border-[#ff801f]/35 dark:border-[#273244] dark:bg-[#111827]/75 dark:hover:border-[#fb923c]/30"
                     >
                       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -1851,9 +1929,10 @@ export default function UserProfiles() {
                           </button>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
+                </AnimatePresence>
 
                 {!filteredForView.length && (
                   <div className="col-span-full flex flex-col items-center justify-center gap-4 py-14 text-center">
@@ -1891,6 +1970,7 @@ export default function UserProfiles() {
               );
             })()}
           </ComponentCard>
+          </motion.div>
 
           <Modal
             mobileBottomSheet
@@ -2200,11 +2280,78 @@ export default function UserProfiles() {
                 )}
 
                 {superTab === 'usuarios' && (
-                  <section
-                    className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-4 dark:border-[#273244] dark:bg-[#111a2b] sm:p-5"
-                    role="tabpanel"
-                    id="super-tab-panel-usuarios"
-                  >
+                  <div className="space-y-5">
+                    {/* Crear usuario */}
+                    <section className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-4 dark:border-[#273244] dark:bg-[#111a2b] sm:p-5">
+                      <div className="mb-4 border-b border-[#e7ded0]/90 pb-3 dark:border-[#334155]/80">
+                        <p className={sectionLabelClass}>Alta</p>
+                        <p className={`mt-0.5 ${claudeSubheadingClass} text-base`}>Crear usuario</p>
+                        <p className="mt-1 text-xs text-[#57534e] dark:text-[#94a3b8]">
+                          Como superadministrador puedes crear cuentas sin límite de plan.
+                        </p>
+                      </div>
+                      {formError && (
+                        <div className="mb-4">
+                          <Alert variant="error" title="Revisa" message={formError} showLink={false} />
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                        <div>
+                          <Label>Nombre de usuario <span className="text-error-500">*</span></Label>
+                          <Input value={form.username} onChange={(e: ChangeEvent<HTMLInputElement>) => setForm((p) => ({ ...p, username: e.target.value }))} />
+                          <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Letras, dígitos y @/./+/-/_</p>
+                        </div>
+                        <div>
+                          <Label>Rol <span className="text-error-500">*</span></Label>
+                          <select value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as Role }))} className={selectFieldClass}>
+                            <option value="tecnico">Técnico</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label>Nombre(s)</Label>
+                          <Input value={form.first_name} onChange={(e: ChangeEvent<HTMLInputElement>) => setForm((p) => ({ ...p, first_name: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label>Apellidos</Label>
+                          <Input value={form.last_name} onChange={(e: ChangeEvent<HTMLInputElement>) => setForm((p) => ({ ...p, last_name: e.target.value }))} />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Label>Correo electrónico</Label>
+                          <Input value={form.email} onChange={(e: ChangeEvent<HTMLInputElement>) => setForm((p) => ({ ...p, email: e.target.value }))} />
+                        </div>
+                        <div>
+                          <Label>Contraseña <span className="text-error-500">*</span></Label>
+                          <div className="relative mt-1">
+                            <Input type={showPassword ? 'text' : 'password'} value={form.password} onChange={(e: ChangeEvent<HTMLInputElement>) => setForm((p) => ({ ...p, password: e.target.value }))} placeholder="Mínimo 8 caracteres" />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2" aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+                              {showPassword ? <EyeIcon className="fill-gray-500 dark:fill-gray-400 size-5" /> : <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400 size-5" />}
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Confirmar contraseña <span className="text-error-500">*</span></Label>
+                          <div className="relative mt-1">
+                            <Input type={showPassword2 ? 'text' : 'password'} value={form.password2} onChange={(e: ChangeEvent<HTMLInputElement>) => setForm((p) => ({ ...p, password2: e.target.value }))} placeholder="Repite la contraseña" />
+                            <button type="button" onClick={() => setShowPassword2(!showPassword2)} className="absolute z-30 -translate-y-1/2 cursor-pointer right-4 top-1/2" aria-label={showPassword2 ? 'Ocultar confirmación' : 'Mostrar confirmación'}>
+                              {showPassword2 ? <EyeIcon className="fill-gray-500 dark:fill-gray-400 size-5" /> : <EyeCloseIcon className="fill-gray-500 dark:fill-gray-400 size-5" />}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2 flex flex-wrap items-end justify-between gap-3">
+                          <button type="button" onClick={() => { const pw = generatePassword(form.username, form.first_name, form.last_name); setForm((p) => ({ ...p, password: pw, password2: pw })); }} className="inline-flex h-9 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-700 shadow-theme-xs transition-colors hover:bg-gray-50 dark:border-[#334155] dark:bg-[#111a2b] dark:text-[#f0f0f0] dark:hover:bg-white/[0.06]">
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 3v2" /><path d="M12 19v2" /><path d="M4.22 4.22l1.42 1.42" /><path d="M18.36 18.36l1.42 1.42" /><path d="M3 12h2" /><path d="M19 12h2" /><path d="M4.22 19.78l1.42-1.42" /><path d="M18.36 5.64l1.42-1.42" /></svg>
+                            Sugerir contraseña segura
+                          </button>
+                          <button type="button" onClick={doCreate} disabled={creating} className={superPanelPrimaryActionClass}>
+                            {creating ? 'Creando…' : 'Crear usuario'}
+                          </button>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Asignación */}
+                    <section className="rounded-2xl border border-[#e7ded0] bg-[#fcfaf6] p-4 dark:border-[#273244] dark:bg-[#111a2b] sm:p-5">
                     <div className="mb-4 border-b border-[#e7ded0]/90 pb-3 dark:border-[#334155]/80">
                       <p className={sectionLabelClass}>Asignación</p>
                       <p className={`mt-0.5 ${claudeSubheadingClass} text-base`}>Usuario sin empresa</p>
@@ -2238,6 +2385,7 @@ export default function UserProfiles() {
                       </div>
                     </div>
                   </section>
+                  </div>
                 )}
 
                 {superTab === 'roles' && (
@@ -3211,6 +3359,7 @@ export default function UserProfiles() {
                     try {
                       const res = await fetch(apiUrl(`/api/users/accounts/${editUser.id}/signature/`), {
                         method: 'DELETE',
+                        credentials: 'include',
                         headers: { ...getAuthHeaders() },
                       });
                       const data = (await res.json().catch(() => null)) as UserSignaturePayload | null;
@@ -3275,7 +3424,7 @@ export default function UserProfiles() {
               </div>
             </div>
           </Modal>
-        </div>
+        </motion.div>
       </div>
     </>
   );

