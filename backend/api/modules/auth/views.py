@@ -9,13 +9,13 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 import logging
 
-from organizations.models import OrganizationUser
 from api.modules.auth.throttling import LoginThrottle
 from api.modules.users.services import (
     audit_security_event,
     get_or_create_profile,
     is_platform_superadmin,
     role_for_profile,
+    tenant_membership_exists,
     tenant_schema_name,
 )
 
@@ -84,10 +84,7 @@ def _sync_user_from_public_to_current_schema(user_identifier: str, by_email: boo
         # SECURITY CRITICAL: Check if user is a member of this tenant BEFORE syncing
         # Superadmins can access all tenants, but regular users must have explicit membership
         if not is_platform_superadmin(source_user):
-            if not OrganizationUser.objects.filter(
-                organization__schema_name=schema,
-                user_id=source_user.id
-            ).exists():
+            if not tenant_membership_exists(schema_name=schema, user_id=source_user.id):
                 # User is not a member of this tenant - do NOT sync
                 return
         
@@ -242,10 +239,7 @@ def login(request):
     schema = (getattr(getattr(connection, "tenant", None), "schema_name", None) or connection.schema_name or "public").strip()
     if schema != "public":
         if not is_platform_superadmin(user):
-            belongs = OrganizationUser.objects.filter(
-                organization__schema_name=schema, user_id=user.id
-            ).exists()
-            if not belongs:
+            if not tenant_membership_exists(schema_name=schema, user_id=user.id):
                 audit_security_event(
                     actor=user,
                     action="auth_login_failed_wrong_tenant",

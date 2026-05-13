@@ -35,6 +35,16 @@ class HealthCheckMiddleware:
     def __call__(self, request):
         if request.method == "GET" and request.path in _LIVENESS_GET_PATHS:
             return JsonResponse({"status": "ok", "scope": "public"})
+        # Browsers opening the API origin show "Not Found" if no route exists for GET /.
+        # HEAD / is already used by some probes; GET / returns a tiny JSON hint (no DB).
+        if request.method == "GET" and request.path == "/":
+            return JsonResponse(
+                {
+                    "status": "ok",
+                    "scope": "api-root",
+                    "message": "NestWork API. Usa rutas bajo /api/ (p. ej. /api/health/).",
+                }
+            )
         if request.method == "HEAD" and request.path == "/":
             return HttpResponse(status=200)
         return self.get_response(request)

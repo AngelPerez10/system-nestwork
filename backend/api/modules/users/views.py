@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
+from django_tenants.utils import schema_context
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
@@ -222,11 +223,13 @@ def users_accounts(request):
                 .order_by("id")
                 .values_list("id", flat=True)
             )
-            memberships = (
-                OrganizationUser.objects.filter(user_id__in=user_ids)
-                .select_related("organization")
-                .order_by("organization__name", "user_id")
-            )
+            memberships = []
+            with schema_context("public"):
+                memberships = list(
+                    OrganizationUser.objects.filter(user_id__in=user_ids)
+                    .select_related("organization")
+                    .order_by("organization__name", "user_id")
+                )
             for m in memberships:
                 memberships_by_user.setdefault(m.user_id, m)
 
@@ -264,16 +267,18 @@ def users_accounts(request):
 
     schema = tenant_schema_name()
     if schema != "public":
-        org = Organization.objects.filter(schema_name=schema).first()
-        if org:
-            members_count = OrganizationUser.objects.filter(organization=org).count()
-            if members_count >= 3:
-                return Response(
-                    {
-                        "detail": "Este plan permite maximo 3 usuarios por empresa. Actualiza plan para agregar mas usuarios.",
-                    },
-                    status=403,
-                )
+        with schema_context("public"):
+            org = Organization.objects.filter(schema_name=schema).first()
+            members_count = (
+                OrganizationUser.objects.filter(organization=org).count() if org else 0
+            )
+        if members_count >= 3:
+            return Response(
+                {
+                    "detail": "Este plan permite maximo 3 usuarios por empresa. Actualiza plan para agregar mas usuarios.",
+                },
+                status=403,
+            )
 
     # ATOMIC TRANSACTION: Ensure all-or-nothing user creation
     try:
@@ -289,9 +294,10 @@ def users_accounts(request):
                 is_active=True,
             )
             if schema != "public":
-                org = Organization.objects.filter(schema_name=schema).first()
-                if org:
-                    OrganizationUser.objects.get_or_create(organization=org, user=user)
+                with schema_context("public"):
+                    org = Organization.objects.filter(schema_name=schema).first()
+                    if org:
+                        OrganizationUser.objects.get_or_create(organization=org, user=user)
 
             profile = get_or_create_profile(user)
             profile.permissions = default_permissions_for_user(user)
@@ -313,9 +319,10 @@ def users_accounts(request):
                 is_active=True,
             )
             if schema != "public":
-                org = Organization.objects.filter(schema_name=schema).first()
-                if org:
-                    OrganizationUser.objects.get_or_create(organization=org, user=user)
+                with schema_context("public"):
+                    org = Organization.objects.filter(schema_name=schema).first()
+                    if org:
+                        OrganizationUser.objects.get_or_create(organization=org, user=user)
 
             profile = get_or_create_profile(user)
             profile.permissions = default_permissions_for_user(user)

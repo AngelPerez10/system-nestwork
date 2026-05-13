@@ -105,14 +105,14 @@ class IsTenantMember(BasePermission):
     def has_permission(self, request: Request, view) -> bool:
         if not request.user or not request.user.is_authenticated:
             return False
-        from api.modules.users.services import is_platform_superadmin, tenant_schema_name
+        from api.modules.users.services import (
+            is_platform_superadmin,
+            tenant_membership_exists,
+            tenant_schema_name,
+        )
         if is_platform_superadmin(request.user):
             return True
         schema = tenant_schema_name()
         if schema == "public":
             return False
-        from organizations.models import OrganizationUser
-        return OrganizationUser.objects.filter(
-            organization__schema_name=schema,
-            user_id=request.user.id,
-        ).exists()
+        return tenant_membership_exists(schema_name=schema, user_id=request.user.id)

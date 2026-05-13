@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.db import connection
 from django.db.utils import OperationalError, ProgrammingError
+from django_tenants.utils import schema_context
 
 from api.permissions_data import default_permissions_for_user
 from organizations.models import OrganizationUser, PublicAuthAuditEvent
@@ -135,6 +136,23 @@ def tenant_schema_name() -> str:
     return (getattr(tenant, "schema_name", None) or connection.schema_name or "public").strip()
 
 
+def tenant_membership_exists(*, schema_name: str, user_id: int) -> bool:
+    """
+    OrganizationUser (and Organization) live in the public schema only.
+
+    When the DB connection is on a tenant schema, ORM queries on shared models
+    can hit an empty homonymous table in the tenant schema; always read membership
+    from ``public``.
+    """
+    if not schema_name or schema_name == "public":
+        return False
+    with schema_context("public"):
+        return OrganizationUser.objects.filter(
+            organization__schema_name=schema_name,
+            user_id=user_id,
+        ).exists()
+
+
 def notify_support_request(*, user, tenant_schema: str, category: str, message: str) -> None:
     """
     Envía el mensaje al buzón de soporte (SUPPORT_INBOX_EMAIL) o lo registra en logs si no está configurado.
@@ -179,11 +197,13 @@ def visible_users_queryset(*, requesting_user, include_superusers: bool = False)
         return qs.none()
 
     if schema != "public":
-        qs = qs.filter(
-            id__in=OrganizationUser.objects.filter(
-                organization__schema_name=schema
-            ).values_list("user_id", flat=True)
-        )
+        with schema_context("public"):
+            member_ids = list(
+                OrganizationUser.objects.filter(organization__schema_name=schema).values_list(
+                    "user_id", flat=True
+                )
+            )
+        qs = qs.filter(id__in=member_ids)
 
     if not include_superusers:
         qs = qs.filter(is_superuser=False)
