@@ -101,7 +101,10 @@ SHOW_PUBLIC_IF_NO_TENANT_FOUND = env.bool(
     default=_render_truthy,
 )
 
-# Hard-stop stubs in production unless there is an explicit temporary override.
+# Cache-backed demo API (órdenes / cotizaciones / servicios en ops_stubs). Default off so a
+# production deploy never exposes synthetic data by accident. Tenant schema is still required;
+# public schema remains blocked in views. Enable only with intent: ENABLE_OPS_STUBS=true
+# in Render → Environment (API service).
 ENABLE_OPS_STUBS = env.bool("ENABLE_OPS_STUBS", default=False)
 
 # HTTPS / cookies — see https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import date
 
-from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from io import BytesIO
@@ -11,6 +10,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from api.modules.ops_stubs.policy import is_ops_stub_api_enabled
 from api.modules.users.services import tenant_schema_name, visible_users_queryset
 from api.utils.orden_media import (
     assert_max_fotos,
@@ -54,7 +54,7 @@ def _paginate(request, rows: list[dict]) -> dict:
 
 
 def _reject_stub_surface():
-    if not getattr(settings, "ENABLE_OPS_STUBS", False):
+    if not is_ops_stub_api_enabled():
         return Response({"detail": "No encontrado"}, status=404)
     if tenant_schema_name() == "public":
         return Response({"detail": "No encontrado"}, status=404)

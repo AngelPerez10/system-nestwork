@@ -188,29 +188,56 @@ export default function MonthlyTarget() {
 
     let ignore = false;
 
-    const getJson = async (path: string) => {
+    const getJson = async (
+      path: string
+    ): Promise<{ ok: true; data: unknown } | { ok: false; status: number }> => {
       const res = await fetch(apiUrl(path), {
         credentials: "include",
         cache: "no-store" as RequestCache,
       });
-      if (!res.ok) return null;
-      return res.json().catch(() => null);
+      if (!res.ok) return { ok: false, status: res.status };
+      const data = await res.json().catch(() => null);
+      return { ok: true, data };
     };
 
     const load = async () => {
       setLoading(true);
       setError("");
       try {
-        const [ordenesData, cotizacionesData, clientesData, tareasData, serviciosData, reportesData, usersData] =
-          await Promise.all([
-            getJson("/api/ordenes/"),
-            getJson("/api/cotizaciones/"),
-            getJson("/api/clientes/"),
-            getJson("/api/tareas/"),
-            getJson("/api/servicios/"),
-            getJson("/api/ordenes/reportes-semanales/"),
-            isAdmin ? getJson("/api/users/accounts/") : Promise.resolve(null),
-          ]);
+        const baseResults = await Promise.all([
+          getJson("/api/ordenes/"),
+          getJson("/api/cotizaciones/"),
+          getJson("/api/clientes/"),
+          getJson("/api/tareas/"),
+          getJson("/api/servicios/"),
+          getJson("/api/ordenes/reportes-semanales/"),
+        ]);
+        const usersResult = isAdmin ? await getJson("/api/users/accounts/") : null;
+
+        const forStatusCheck = [
+          ...baseResults,
+          ...(isAdmin && usersResult ? [usersResult] : []),
+        ];
+        const anyOk = baseResults.some((r) => r.ok) || Boolean(isAdmin && usersResult?.ok);
+        if (!anyOk) {
+          const statuses = forStatusCheck.map((r) => (r.ok ? 200 : r.status));
+          const all404 = statuses.every((s) => s === 404);
+          const hint = all404
+            ? " El API devolvió 404 en todos los módulos: suele faltar un Domain de tenant para el host del API (comando bootstrap_api_tenant en el servicio backend) o las rutas demo están desactivadas (ENABLE_OPS_STUBS)."
+            : " Revisa la sesión, CORS y la URL del API.";
+          if (!ignore) {
+            setError(`No se pudo cargar datos del historial.${hint}`);
+          }
+          return;
+        }
+
+        const ordenesData = baseResults[0].ok ? baseResults[0].data : null;
+        const cotizacionesData = baseResults[1].ok ? baseResults[1].data : null;
+        const clientesData = baseResults[2].ok ? baseResults[2].data : null;
+        const tareasData = baseResults[3].ok ? baseResults[3].data : null;
+        const serviciosData = baseResults[4].ok ? baseResults[4].data : null;
+        const reportesData = baseResults[5].ok ? baseResults[5].data : null;
+        const usersData = isAdmin && usersResult?.ok ? usersResult.data : null;
 
         const items: ActivityItem[] = [];
 
@@ -563,7 +590,13 @@ export default function MonthlyTarget() {
         {loading ? (
           <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">Cargando historial...</div>
         ) : error ? (
-          <div className="py-10 text-center text-sm text-red-500">{error}</div>
+          <div
+            role="alert"
+            aria-live="polite"
+            className="rounded-lg border border-red-200 bg-red-50 px-4 py-6 text-center text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
+          >
+            {error}
+          </div>
         ) : filteredItems.length === 0 ? (
           <div className="py-10 text-center text-sm text-gray-500 dark:text-gray-400">No hay movimientos para este filtro.</div>
         ) : (
