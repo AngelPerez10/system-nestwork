@@ -11,7 +11,11 @@
 # Static site (Render dashboard), choose ONE:
 # A) Root Directory `frontend` → Publish `dist`, Build `bash build.sh` (frontend/build.sh)
 # B) Root Directory empty (repo root) → Publish `frontend/dist`, Build `npm run build` (uses root package.json → frontend/)
-# Set VITE_API_BASE to your API URL on the static site.
+#
+# OBLIGATORIO si el API es otro servicio (otro *.onrender.com): en el Static Site → Environment define
+#   VITE_API_BASE=https://TU-SERVICIO-API.onrender.com
+# (sin barra final). Sin eso, el JS llamará al host del front y el login/CORS/cookies fallarán.
+# build.sh en Render (RENDER=1) falla el build si falta VITE_API_BASE (omitir con SKIP_VITE_API_BASE_CHECK=1).
 
 version: "1"
 services:

@@ -12,6 +12,19 @@ corepack enable
 echo "==> [frontend] pnpm install --frozen-lockfile"
 pnpm install --frozen-lockfile
 
+if [ -n "${RENDER:-}" ] && [ -z "${SKIP_VITE_API_BASE_CHECK:-}" ] && [ -z "${VITE_API_BASE:-}" ] && [ -z "${VITE_API_BASE_URL:-}" ]; then
+  echo >&2 ""
+  echo >&2 "============================================================================"
+  echo >&2 "ERROR (Render): VITE_API_BASE no está definido."
+  echo >&2 "  El SPA usaría el host del sitio estático para /api/* y el login fallará."
+  echo >&2 "  En Render → tu Static Site → Environment añade, por ejemplo:"
+  echo >&2 "    VITE_API_BASE=https://system-nestwork.onrender.com"
+  echo >&2 "  Luego redeploy. (Para omitir este chequeo: SKIP_VITE_API_BASE_CHECK=1)"
+  echo >&2 "============================================================================"
+  echo >&2 ""
+  exit 1
+fi
+
 echo "==> [frontend] pnpm run build"
 pnpm run build
 
